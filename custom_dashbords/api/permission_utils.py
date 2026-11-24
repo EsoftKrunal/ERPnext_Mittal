@@ -8,12 +8,42 @@ from frappe import _
 def verify_read_permission(doctype: str):
 	"""Enforce server-side read permission for the given DocType.
 	Throws frappe.PermissionError if the current user lacks read access.
+	System Manager and Administrator are granted access.
 	"""
+	if frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles():
+		return
+
 	if not frappe.has_permission(doctype, ptype="read"):
 		frappe.throw(
 			_("You do not have permission to access {0} records.").format(_(doctype)),
 			frappe.PermissionError,
 		)
+
+
+def verify_company_permission(company: str = None):
+	"""Enforce that the current user has permission to view data for the specified company.
+	If the user has User Permissions restricting them to specific companies,
+	requesting another company will raise frappe.PermissionError.
+	"""
+	if not company or frappe.session.user in ("Administrator", "System Manager"):
+		return
+
+	# Ensure company exists
+	if not frappe.db.exists("Company", company):
+		frappe.throw(
+			_("Company {0} does not exist.").format(company),
+			frappe.DoesNotExistError,
+		)
+
+	# Check User Permissions on Company
+	user_perms = frappe.defaults.get_user_permissions(frappe.session.user)
+	if user_perms and "Company" in user_perms:
+		allowed = {p.get("doc") for p in user_perms["Company"] if p.get("doc")}
+		if allowed and company not in allowed:
+			frappe.throw(
+				_("You do not have permission to access data for Company {0}.").format(company),
+				frappe.PermissionError,
+			)
 
 
 def get_permission_condition(doctype: str, alias: str = None) -> str:

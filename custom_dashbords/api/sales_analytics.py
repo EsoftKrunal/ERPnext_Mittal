@@ -2,9 +2,11 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe import _
 from frappe.utils import flt, cint, today, add_months, getdate, date_diff
 from custom_dashbords.api.permission_utils import (
 	verify_read_permission,
+	verify_company_permission,
 	get_permission_condition,
 	get_default_company,
 	get_company_currency,
@@ -19,6 +21,8 @@ def _parse_filters(kwargs):
 	company = kwargs.get("company")
 	if not company:
 		company = get_default_company()
+
+	verify_company_permission(company)
 
 	return {
 		"company": company,
@@ -77,59 +81,83 @@ def _build_conditions(filters, doctype, date_field="transaction_date"):
 # TAB 1 - Overview
 # ---------------------------------------------------------------------------
 
+def _can_read(doctype: str) -> bool:
+	if frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles():
+		return True
+	return frappe.has_permission(doctype, ptype="read")
+
+
 @frappe.whitelist()
 def get_overview_kpis(**kwargs):
-	verify_read_permission("Sales Invoice")
-	verify_read_permission("Sales Order")
+	has_so = _can_read("Sales Order")
+	has_si = _can_read("Sales Invoice")
+
+	if not (has_so or has_si):
+		frappe.throw(
+			_("You do not have permission to access sales records."),
+			frappe.PermissionError,
+		)
 
 	f = _parse_filters(kwargs)
 
 	# Revenue & Invoices
-	si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
-	si_data = frappe.db.sql(f"""
-		SELECT 
-			SUM(t.base_grand_total) as total_revenue,
-			COUNT(t.name) as invoice_count,
-			SUM(t.total_qty) as total_qty_sold
-		FROM `tabSales Invoice` t
-		WHERE {si_where}
-	""", si_vals, as_dict=True)
+	total_revenue = 0.0
+	invoice_count = 0
+	total_qty_sold = 0.0
+	mom_growth = 0.0
+
+	if has_si:
+		si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
+		si_data = frappe.db.sql(f"""
+			SELECT 
+				SUM(t.base_grand_total) as total_revenue,
+				COUNT(t.name) as invoice_count,
+				SUM(t.total_qty) as total_qty_sold
+			FROM `tabSales Invoice` t
+			WHERE {si_where}
+		""", si_vals, as_dict=True)
+
+		lm_f = f.copy()
+		lm_f["from_date"] = add_months(f.get("from_date") or today(), -1)
+		lm_f["to_date"] = add_months(f.get("to_date") or today(), -1)
+		lm_where, lm_vals = _build_conditions(lm_f, "Sales Invoice", "posting_date")
+		lm_data = frappe.db.sql(f"""
+			SELECT SUM(t.base_grand_total) as lm_revenue
+			FROM `tabSales Invoice` t
+			WHERE {lm_where}
+		""", lm_vals, as_dict=True)
+
+		total_revenue = flt(si_data[0].get("total_revenue")) if si_data else 0.0
+		invoice_count = cint(si_data[0].get("invoice_count")) if si_data else 0
+		total_qty_sold = flt(si_data[0].get("total_qty_sold")) if si_data else 0.0
+		lm_revenue = flt(lm_data[0].get("lm_revenue")) if lm_data else 0.0
+		mom_growth = ((total_revenue - lm_revenue) / lm_revenue * 100.0) if lm_revenue else 0.0
 
 	# Bookings & Orders
-	so_where, so_vals = _build_conditions(f, "Sales Order", "transaction_date")
-	so_data = frappe.db.sql(f"""
-		SELECT 
-			SUM(t.base_grand_total) as total_so_value,
-			COUNT(t.name) as order_count
-		FROM `tabSales Order` t
-		WHERE {so_where}
-	""", so_vals, as_dict=True)
+	total_so_value = 0.0
+	order_count = 0
+	aov = 0.0
 
-	# MoM Growth (Revenue)
-	lm_f = f.copy()
-	lm_f["from_date"] = add_months(f.get("from_date") or today(), -1)
-	lm_f["to_date"] = add_months(f.get("to_date") or today(), -1)
-	lm_where, lm_vals = _build_conditions(lm_f, "Sales Invoice", "posting_date")
-	lm_data = frappe.db.sql(f"""
-		SELECT SUM(t.base_grand_total) as lm_revenue
-		FROM `tabSales Invoice` t
-		WHERE {lm_where}
-	""", lm_vals, as_dict=True)
+	if has_so:
+		so_where, so_vals = _build_conditions(f, "Sales Order", "transaction_date")
+		so_data = frappe.db.sql(f"""
+			SELECT 
+				SUM(t.base_grand_total) as total_so_value,
+				COUNT(t.name) as order_count
+			FROM `tabSales Order` t
+			WHERE {so_where}
+		""", so_vals, as_dict=True)
 
-	total_revenue = flt(si_data[0].get("total_revenue")) if si_data else 0.0
-	lm_revenue = flt(lm_data[0].get("lm_revenue")) if lm_data else 0.0
-	mom_growth = ((total_revenue - lm_revenue) / lm_revenue * 100.0) if lm_revenue else 0.0
-
-	order_count = cint(so_data[0].get("order_count")) if so_data else 0
-	total_so_value = flt(so_data[0].get("total_so_value")) if so_data else 0.0
-	aov = (total_so_value / order_count) if order_count else 0.0
+		order_count = cint(so_data[0].get("order_count")) if so_data else 0
+		total_so_value = flt(so_data[0].get("total_so_value")) if so_data else 0.0
+		aov = (total_so_value / order_count) if order_count else 0.0
 
 	return {
 		"total_revenue": total_revenue,
 		"total_so_value": total_so_value,
-		"total_qty_sold": flt(si_data[0].get("total_qty_sold")) if si_data else 0.0,
+		"total_qty_sold": total_qty_sold,
 		"order_count": order_count,
-		"invoice_count": cint(si_data[0].get("invoice_count")) if si_data else 0,
+		"invoice_count": invoice_count,
 		"aov": aov,
 		"mom_growth": mom_growth,
 		"currency": get_company_currency(f.get("company")),
@@ -138,91 +166,166 @@ def get_overview_kpis(**kwargs):
 
 @frappe.whitelist()
 def get_chart_monthly_sales_trend(**kwargs):
-	verify_read_permission("Sales Order")
-	verify_read_permission("Sales Invoice")
+	has_so = _can_read("Sales Order")
+	has_si = _can_read("Sales Invoice")
+
+	if not (has_so or has_si):
+		frappe.throw(
+			_("You do not have permission to access sales records."),
+			frappe.PermissionError,
+		)
 
 	f = _parse_filters(kwargs)
 
-	so_where, so_vals = _build_conditions(f, "Sales Order", "transaction_date")
-	si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
+	so_trend = []
+	if has_so:
+		so_where, so_vals = _build_conditions(f, "Sales Order", "transaction_date")
+		so_trend = frappe.db.sql(f"""
+			SELECT DATE_FORMAT(t.transaction_date, '%%Y-%%m') as month, SUM(t.base_grand_total) as value
+			FROM `tabSales Order` t WHERE {so_where} GROUP BY month
+		""", so_vals, as_dict=True)
 
-	so_trend = frappe.db.sql(f"""
-		SELECT DATE_FORMAT(t.transaction_date, '%%Y-%%m') as month, SUM(t.base_grand_total) as value
-		FROM `tabSales Order` t WHERE {so_where} GROUP BY month
-	""", so_vals, as_dict=True)
-
-	si_trend = frappe.db.sql(f"""
-		SELECT DATE_FORMAT(t.posting_date, '%%Y-%%m') as month, SUM(t.base_grand_total) as value
-		FROM `tabSales Invoice` t WHERE {si_where} GROUP BY month
-	""", si_vals, as_dict=True)
+	si_trend = []
+	if has_si:
+		si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
+		si_trend = frappe.db.sql(f"""
+			SELECT DATE_FORMAT(t.posting_date, '%%Y-%%m') as month, SUM(t.base_grand_total) as value
+			FROM `tabSales Invoice` t WHERE {si_where} GROUP BY month
+		""", si_vals, as_dict=True)
 
 	return {"booked": so_trend, "invoiced": si_trend}
 
 
 @frappe.whitelist()
 def get_top_items_by_revenue(**kwargs):
-	verify_read_permission("Sales Invoice")
+	has_si = _can_read("Sales Invoice")
+	has_so = _can_read("Sales Order")
+
+	if not (has_si or has_so):
+		frappe.throw(
+			_("You do not have permission to access sales records."),
+			frappe.PermissionError,
+		)
 
 	f = _parse_filters(kwargs)
-	si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
-
-	return frappe.db.sql(f"""
-		SELECT i.item_code, i.item_name, SUM(i.base_amount) as revenue
-		FROM `tabSales Invoice Item` i
-		JOIN `tabSales Invoice` t ON t.name = i.parent
-		WHERE {si_where}
-		GROUP BY i.item_code
-		ORDER BY revenue DESC LIMIT 5
-	""", si_vals, as_dict=True)
+	if has_si:
+		si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
+		return frappe.db.sql(f"""
+			SELECT i.item_code, i.item_name, SUM(i.base_amount) as revenue
+			FROM `tabSales Invoice Item` i
+			JOIN `tabSales Invoice` t ON t.name = i.parent
+			WHERE {si_where}
+			GROUP BY i.item_code
+			ORDER BY revenue DESC LIMIT 5
+		""", si_vals, as_dict=True)
+	else:
+		so_where, so_vals = _build_conditions(f, "Sales Order", "transaction_date")
+		return frappe.db.sql(f"""
+			SELECT i.item_code, i.item_name, SUM(i.base_amount) as revenue
+			FROM `tabSales Order Item` i
+			JOIN `tabSales Order` t ON t.name = i.parent
+			WHERE {so_where}
+			GROUP BY i.item_code
+			ORDER BY revenue DESC LIMIT 5
+		""", so_vals, as_dict=True)
 
 
 @frappe.whitelist()
 def get_top_customers_by_revenue(**kwargs):
-	verify_read_permission("Sales Invoice")
+	has_si = _can_read("Sales Invoice")
+	has_so = _can_read("Sales Order")
+
+	if not (has_si or has_so):
+		frappe.throw(
+			_("You do not have permission to access sales records."),
+			frappe.PermissionError,
+		)
 
 	f = _parse_filters(kwargs)
-	si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
-
-	return frappe.db.sql(f"""
-		SELECT t.customer, t.customer_name, SUM(t.base_grand_total) as revenue
-		FROM `tabSales Invoice` t
-		WHERE {si_where}
-		GROUP BY t.customer
-		ORDER BY revenue DESC LIMIT 5
-	""", si_vals, as_dict=True)
+	if has_si:
+		si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
+		return frappe.db.sql(f"""
+			SELECT t.customer, t.customer_name, SUM(t.base_grand_total) as revenue
+			FROM `tabSales Invoice` t
+			WHERE {si_where}
+			GROUP BY t.customer
+			ORDER BY revenue DESC LIMIT 5
+		""", si_vals, as_dict=True)
+	else:
+		so_where, so_vals = _build_conditions(f, "Sales Order", "transaction_date")
+		return frappe.db.sql(f"""
+			SELECT t.customer, t.customer_name, SUM(t.base_grand_total) as revenue
+			FROM `tabSales Order` t
+			WHERE {so_where}
+			GROUP BY t.customer
+			ORDER BY revenue DESC LIMIT 5
+		""", so_vals, as_dict=True)
 
 
 @frappe.whitelist()
 def get_chart_revenue_by_territory(**kwargs):
-	verify_read_permission("Sales Invoice")
+	has_si = _can_read("Sales Invoice")
+	has_so = _can_read("Sales Order")
+
+	if not (has_si or has_so):
+		frappe.throw(
+			_("You do not have permission to access sales records."),
+			frappe.PermissionError,
+		)
 
 	f = _parse_filters(kwargs)
-	si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
-
-	return frappe.db.sql(f"""
-		SELECT t.territory, SUM(t.base_grand_total) as value
-		FROM `tabSales Invoice` t
-		WHERE {si_where}
-		GROUP BY t.territory
-		ORDER BY value DESC
-	""", si_vals, as_dict=True)
+	if has_si:
+		si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
+		return frappe.db.sql(f"""
+			SELECT t.territory, SUM(t.base_grand_total) as value
+			FROM `tabSales Invoice` t
+			WHERE {si_where}
+			GROUP BY t.territory
+			ORDER BY value DESC
+		""", si_vals, as_dict=True)
+	else:
+		so_where, so_vals = _build_conditions(f, "Sales Order", "transaction_date")
+		return frappe.db.sql(f"""
+			SELECT t.territory, SUM(t.base_grand_total) as value
+			FROM `tabSales Order` t
+			WHERE {so_where}
+			GROUP BY t.territory
+			ORDER BY value DESC
+		""", so_vals, as_dict=True)
 
 
 @frappe.whitelist()
 def get_chart_revenue_by_item_group(**kwargs):
-	verify_read_permission("Sales Invoice")
+	has_si = _can_read("Sales Invoice")
+	has_so = _can_read("Sales Order")
+
+	if not (has_si or has_so):
+		frappe.throw(
+			_("You do not have permission to access sales records."),
+			frappe.PermissionError,
+		)
 
 	f = _parse_filters(kwargs)
-	si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
-
-	return frappe.db.sql(f"""
-		SELECT i.item_group, SUM(i.base_amount) as value
-		FROM `tabSales Invoice Item` i
-		JOIN `tabSales Invoice` t ON t.name = i.parent
-		WHERE {si_where}
-		GROUP BY i.item_group
-		ORDER BY value DESC
-	""", si_vals, as_dict=True)
+	if has_si:
+		si_where, si_vals = _build_conditions(f, "Sales Invoice", "posting_date")
+		return frappe.db.sql(f"""
+			SELECT i.item_group, SUM(i.base_amount) as value
+			FROM `tabSales Invoice Item` i
+			JOIN `tabSales Invoice` t ON t.name = i.parent
+			WHERE {si_where}
+			GROUP BY i.item_group
+			ORDER BY value DESC
+		""", si_vals, as_dict=True)
+	else:
+		so_where, so_vals = _build_conditions(f, "Sales Order", "transaction_date")
+		return frappe.db.sql(f"""
+			SELECT i.item_group, SUM(i.base_amount) as value
+			FROM `tabSales Order Item` i
+			JOIN `tabSales Order` t ON t.name = i.parent
+			WHERE {so_where}
+			GROUP BY i.item_group
+			ORDER BY value DESC
+		""", so_vals, as_dict=True)
 
 
 @frappe.whitelist()

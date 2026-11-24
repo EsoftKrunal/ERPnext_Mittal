@@ -291,7 +291,22 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
     }
 
     function destroy_chart(key) {
-        if (charts[key]) { try { charts[key].destroy(); } catch(e) {} charts[key] = null; }
+        if (charts[key]) {
+            try {
+                if (charts[key].container && charts[key].container.parentNode) {
+                    charts[key].container.parentNode.removeChild(charts[key].container);
+                } else if (charts[key].destroy) {
+                    charts[key].destroy();
+                }
+            } catch(e) {}
+            charts[key] = null;
+        }
+    }
+
+    function is_chart_empty(d, val_key="value") {
+        if (!d || !d.length) return true;
+        let sum = d.reduce((acc, row) => acc + (parseFloat(row[val_key]) || 0), 0);
+        return sum === 0;
     }
 
     function set_loading(sel) { $(sel).html('<div class="sa-spinner"></div>'); }
@@ -482,7 +497,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_revenue_by_territory", args: _filters, callback: r => {
             destroy_chart("o_terr"); $("#chart-rev-territory").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-rev-territory").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-rev-territory").html('<div class="sa-empty">No data</div>'); return; }
             charts.o_terr = new frappe.Chart("#chart-rev-territory", {
                 data: { labels: d.map(x=>x.territory), datasets: [{values: d.map(x=>x.value)}] },
                 type: "donut", height: 280, colors: ["#4299e1","#48bb78","#ed8936","#e53e3e","#9f7aea"]
@@ -494,7 +509,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_top_items_by_revenue", args: _filters, callback: r => {
             destroy_chart("o_items"); $("#chart-top-items").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-top-items").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "revenue")) { $("#chart-top-items").html('<div class="sa-empty">No data</div>'); return; }
             charts.o_items = new frappe.Chart("#chart-top-items", {
                 data: { labels: d.map(x=>x.item_code), datasets: [{name:"Revenue", values: d.map(x=>x.revenue)}] },
                 type: "bar", height: 280, colors: ["#3182ce"]
@@ -505,7 +520,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_top_customers_by_revenue", args: _filters, callback: r => {
             destroy_chart("o_cust"); $("#chart-top-customers").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-top-customers").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "revenue")) { $("#chart-top-customers").html('<div class="sa-empty">No data</div>'); return; }
             charts.o_cust = new frappe.Chart("#chart-top-customers", {
                 data: { labels: d.map(x=>x.customer), datasets: [{name:"Revenue", values: d.map(x=>x.revenue)}] },
                 type: "bar", height: 280, colors: ["#dd6b20"]
@@ -517,7 +532,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_revenue_by_item_group", args: _filters, callback: r => {
             destroy_chart("o_ig"); $("#chart-rev-item-group").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-rev-item-group").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-rev-item-group").html('<div class="sa-empty">No data</div>'); return; }
             charts.o_ig = new frappe.Chart("#chart-rev-item-group", {
                 data: { labels: d.map(x=>x.item_group), datasets: [{values: d.map(x=>x.value)}] },
                 type: "donut", height: 280, colors: ["#805ad5","#d53f8c","#38b2ac","#3182ce"]
@@ -570,7 +585,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_fulfillment_status_split", args: _filters, callback: r => {
             destroy_chart("f_split"); $("#chart-fulfillment-split").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-fulfillment-split").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-fulfillment-split").html('<div class="sa-empty">No data</div>'); return; }
             charts.f_split = new frappe.Chart("#chart-fulfillment-split", {
                 data: { labels: d.map(x=>x.status), datasets: [{values: d.map(x=>x.value)}] },
                 type: "donut", height: 280, colors: ["#48bb78","#ed8936","#e2e8f0"]
@@ -582,7 +597,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_ordered_vs_delivered_vs_invoiced", args: _filters, callback: r => {
             destroy_chart("f_odi"); $("#chart-ordered-delivered").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-ordered-delivered").html('<div class="sa-empty">No data</div>'); return; }
+            if(!d.length || (is_chart_empty(d, "ordered") && is_chart_empty(d, "delivered") && is_chart_empty(d, "invoiced_approx"))) { $("#chart-ordered-delivered").html('<div class="sa-empty">No data</div>'); return; }
             charts.f_odi = new frappe.Chart("#chart-ordered-delivered", {
                 data: { 
                     labels: d.map(x=>x.item_code), 
@@ -600,7 +615,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_overdue_value_by_customer", args: _filters, callback: r => {
             destroy_chart("f_over"); $("#chart-overdue-customer").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-overdue-customer").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-overdue-customer").html('<div class="sa-empty">No data</div>'); return; }
             charts.f_over = new frappe.Chart("#chart-overdue-customer", {
                 data: { labels: d.map(x=>x.customer), datasets: [{name:"Overdue Value", values: d.map(x=>x.value)}] },
                 type: "bar", height: 280, colors: ["#e53e3e"]
@@ -679,7 +694,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_ageing_buckets", args: _filters, callback: r => {
             destroy_chart("r_age"); $("#chart-ageing-buckets").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-ageing-buckets").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-ageing-buckets").html('<div class="sa-empty">No data</div>'); return; }
             charts.r_age = new frappe.Chart("#chart-ageing-buckets", {
                 data: { labels: d.map(x=>x.bucket), datasets: [{name:"Amount", values:d.map(x=>x.value)}] },
                 type: "bar", height: 280, colors: ["#dd6b20"]
@@ -691,7 +706,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_top_customers_by_outstanding", args: _filters, callback: r => {
             destroy_chart("r_cust"); $("#chart-top-cust-out").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-top-cust-out").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "outstanding")) { $("#chart-top-cust-out").html('<div class="sa-empty">No data</div>'); return; }
             charts.r_cust = new frappe.Chart("#chart-top-cust-out", {
                 data: { labels: d.map(x=>x.customer), datasets: [{name:"Outstanding", values:d.map(x=>x.outstanding)}] },
                 type: "bar", height: 280, colors: ["#e53e3e"]
@@ -703,7 +718,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_outstanding_by_territory_or_group", args: _filters, callback: r => {
             destroy_chart("r_terr"); $("#chart-out-territory").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-out-territory").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-out-territory").html('<div class="sa-empty">No data</div>'); return; }
             charts.r_terr = new frappe.Chart("#chart-out-territory", {
                 data: { labels: d.map(x=>x.label), datasets: [{values: d.map(x=>x.value)}] },
                 type: "donut", height: 280, colors: ["#e53e3e","#ed8936","#ecc94b","#48bb78","#4299e1"]
@@ -747,7 +762,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_new_customer_trend", args: _filters, callback: r => {
             destroy_chart("a_trend"); $("#chart-new-cust-trend").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-new-cust-trend").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-new-cust-trend").html('<div class="sa-empty">No data</div>'); return; }
             charts.a_trend = new frappe.Chart("#chart-new-cust-trend", {
                 data: { labels: d.map(x=>x.month), datasets: [{name:"New Customers", values:d.map(x=>x.value)}] },
                 type: "bar", height: 280, colors: ["#38b2ac"]
@@ -758,7 +773,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_customer_activity_split", args: _filters, callback: r => {
             destroy_chart("a_split"); $("#chart-activity-split").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-activity-split").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-activity-split").html('<div class="sa-empty">No data</div>'); return; }
             charts.a_split = new frappe.Chart("#chart-activity-split", {
                 data: { labels: d.map(x=>x.status), datasets: [{values: d.map(x=>x.value)}] },
                 type: "donut", height: 280, colors: ["#48bb78","#ed8936","#e53e3e"]
@@ -770,7 +785,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_top_dormant_customers_by_value", args: _filters, callback: r => {
             destroy_chart("a_dorm"); $("#chart-top-dormant").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-top-dormant").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-top-dormant").html('<div class="sa-empty">No data</div>'); return; }
             charts.a_dorm = new frappe.Chart("#chart-top-dormant", {
                 data: { labels: d.map(x=>x.customer), datasets: [{name:"Historical Spend", values:d.map(x=>x.value)}] },
                 type: "bar", height: 280, colors: ["#e53e3e"]
@@ -782,7 +797,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         frappe.call({ method: API+"get_chart_dormant_value_by_customer_group", args: _filters, callback: r => {
             destroy_chart("a_dgrp"); $("#chart-dormant-group").empty();
             let d = r.message || [];
-            if(!d.length) { $("#chart-dormant-group").html('<div class="sa-empty">No data</div>'); return; }
+            if(is_chart_empty(d, "value")) { $("#chart-dormant-group").html('<div class="sa-empty">No data</div>'); return; }
             charts.a_dgrp = new frappe.Chart("#chart-dormant-group", {
                 data: { labels: d.map(x=>x.label), datasets: [{values: d.map(x=>x.value)}] },
                 type: "donut", height: 280, colors: ["#dd6b20","#e53e3e","#805ad5","#3182ce"]

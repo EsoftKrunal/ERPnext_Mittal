@@ -12,10 +12,24 @@ class TestSalesAnalytics(IntegrationTestCase):
 		super().setUp()
 		frappe.set_user("Administrator")
 		self.company = frappe.db.get_single_value("Global Defaults", "default_company") or "e"
+		self.cleanup_records = []
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
+		for dt, dn in reversed(self.cleanup_records):
+			try:
+				if frappe.db.exists(dt, dn):
+					doc = frappe.get_doc(dt, dn)
+					if getattr(doc, "docstatus", 0) == 1:
+						doc.cancel()
+					frappe.delete_doc(dt, dn, ignore_permissions=True, force=True)
+			except Exception:
+				pass
+		frappe.db.commit()
 		super().tearDown()
+
+	def _track(self, dt, dn):
+		self.cleanup_records.append((dt, dn))
 
 	def test_all_endpoints_empty_data(self):
 		"""Verify that all 26 endpoints execute cleanly without exceptions on empty/default filters."""
@@ -177,6 +191,7 @@ class TestSalesAnalytics(IntegrationTestCase):
 				"item_group": "Products",
 				"is_stock_item": 0,
 			}).insert(ignore_permissions=True)
+			self._track("Item", item.name)
 
 		# Ensure Customer exists
 		customer_name = "_Test_Dashboard_Customer"
@@ -188,6 +203,7 @@ class TestSalesAnalytics(IntegrationTestCase):
 				"customer_group": "Commercial",
 				"territory": "India",
 			}).insert(ignore_permissions=True)
+			self._track("Customer", cust.name)
 
 		# Create and submit Sales Order
 		so = frappe.get_doc({
@@ -203,6 +219,7 @@ class TestSalesAnalytics(IntegrationTestCase):
 			}],
 		}).insert(ignore_permissions=True)
 		so.submit()
+		self._track("Sales Order", so.name)
 
 		# Create and submit Sales Invoice
 		si = frappe.get_doc({
@@ -220,6 +237,7 @@ class TestSalesAnalytics(IntegrationTestCase):
 			}],
 		}).insert(ignore_permissions=True)
 		si.submit()
+		self._track("Sales Invoice", si.name)
 
 		# Verify Overview KPIs include SI
 		res_kpi = sales_analytics.get_overview_kpis(company=self.company)

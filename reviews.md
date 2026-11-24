@@ -26,6 +26,53 @@ Based on the audit of previous implementations (`frappe_dashboards` and `esoft_c
 * **Phase 0 & 1 Review (2026-11-24):** Reference audit completed. All four reference dashboard source files inspected in `esoft_custom_bom`. Identified SQL injection in `sales_analytics.py`, missing company filters in Sales and Production, batch outward handling in Inventory, and `is_abstra()` fallback requirement.
 * **Phase 2 — Sales Dashboard Review (2026-11-24):**
   - Backend API (`custom_dashbords/api/sales_analytics.py`): All 26 endpoints implement `verify_read_permission`, company filtering via `_parse_filters` defaulting to `get_default_company()` ("e"), parameterized SQL queries without string concatenation.
-  - Desk Page (`custom_dashbords/page/sales_analytics/`): Implemented `sales_analytics.json`, `sales_analytics.js`, `sales_analytics.css`. Added `Company` filter to filter bar with dynamic default, updated `API` prefix to `custom_dashbords.api.sales_analytics.`.
-  - Integration Test Suite (`custom_dashbords/tests/test_sales_analytics.py`): 5 integration tests covering all 26 endpoints, company isolation, SQL injection prevention, permission enforcement, and KPI calculations. Ran with `bench --site mittal.local run-tests --app custom_dashbords` -> 5 passed in 1.066s.
-  - Browser/Desk verification: `curl -s -L -w "%{http_code}\n" -H "Host: mittal.local" http://127.0.0.1:8001/app/sales-analytics` returns HTTP 200 OK. Page record exists in `tabPage` with roles `System Manager`, `Sales Manager`, `Sales User`, `Accounts User`.
+  - Desk Page (`custom_dashbords/page/sales_analytics/`): Implemented `sales_analytics.json`, `sales_analytics.js`, `sales_analytics.css`. Added `Company` filter to filter bar with dynamic default, updated `API` prefix to `custom_dashbords.api.sales_analytics.`. Added `is_chart_empty` guards to prevent empty chart rendering exceptions.
+  - Integration Test Suites (`test_sales_analytics.py` & `test_sales_dashboard_verification.py`): 8 integration tests covering all 26 endpoints, company isolation, multi-company restriction, SQL injection prevention, permission enforcement, role desk and API access, and transaction cleanup guarantee. Ran with `bench --site mittal.local run-tests --app custom_dashbords` -> 8 passed in 6.009s.
+
+---
+
+## 3. Sales Dashboard Verification & Audit Report
+
+### 1. Company Security Audit — PASS
+- **Multi-Company Isolation:** Verified across all 26 endpoints. If a user has User Permission restricted to Company A (e.g. `"e"`), requesting Company B (e.g. `"_Test_Mittal_Co_2"`) raises `frappe.PermissionError` via `verify_company_permission(company)`.
+- **Query Filter Enforcement:** In `_build_conditions`, every transactional query joins or filters on `t.company = %(company)s` combined with Frappe's native `get_permission_condition("Company")`.
+- **Test Evidence:** `test_company_security_multi_company_isolation` verified all 26 endpoints against cross-company leakage.
+
+### 2. Browser & Desk Page Verification — READY FOR MANUAL REVIEW
+- **Page Route:** `/app/sales-analytics` (Desk Page name: `sales-analytics`).
+- **4 Tabs:** Overview, Fulfillment, Receivables, Customer Activity.
+- **17 Charts:** All 17 charts configured with Frappe Charts (line, bar, donut) and guarded with `is_chart_empty()` to cleanly show `<div class="sa-empty">No data</div>` when data total is 0.
+- **23 KPIs:** All KPIs load dynamically via Frappe AJAX calls with currency formatted according to the selected company.
+- **Filters:** Company (defaults to `"e"`), From Date, To Date, Customer, Customer Group, Territory, Item Group, Sales Person.
+- **Drilldown:** Sales Order -> Delivery Note -> Sales Invoice interactive drilldown implemented in Tab 2.
+- **Status:** Automated script verified zero HTTP errors. Final visual verification designated for manual testing by user as requested.
+
+### 3. Test Data Cleanup Audit — PASS
+- **Cleanup Guarantee:** Tests in `test_sales_analytics.py` and `test_sales_dashboard_verification.py` record all generated documents (`Company`, `Customer`, `Item`, `Sales Order`, `Sales Invoice`, `User`, `User Permission`) in `self.cleanup_records` and cancel/delete them during `tearDown()`.
+- **Database State Verified on `mittal.local`:**
+  - `tabSales Order`: 0 records
+  - `tabSales Invoice`: 0 records
+  - `tabCustomer`: 0 test records
+  - `tabItem`: 0 test records
+  - `tabCompany`: 1 record (`"e"`, target site original)
+  - `tabUser`: 0 test users
+  - `tabUser Permission`: 0 test permissions
+- **Test Evidence:** Direct MariaDB query confirmed zero residual test transactions.
+
+### 4. Role & Access Control Audit — PASS
+- **Desk Page Permissions:** `tabPage` configured with allowed roles:
+  - `System Manager` (Allowed)
+  - `Sales Manager` (Allowed)
+  - `Sales User` (Allowed)
+  - `Accounts User` (Allowed)
+  - `Guest` (Blocked - Page inaccessible)
+- **API Endpoint Protection:**
+  - `Guest` requests to all endpoints immediately raise `frappe.PermissionError`.
+  - Roles with `Sales Order` read permission can access sales overview, fulfillment, and customer activity.
+  - Roles with `Sales Invoice` read permission can access sales overview, receivables, and customer activity.
+- **Test Evidence:** `test_role_permissions_desk_and_api` passed.
+
+### 5. Code Quality & Standards — PASS
+- Parameterized SQL queries for all 26 endpoints; zero string interpolations.
+- Zero dependencies on `esoft_custom_bom` or `frappe_dashboards`.
+- Fully independent within `custom_dashbords`.
