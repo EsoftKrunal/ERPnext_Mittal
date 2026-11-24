@@ -15,13 +15,24 @@
 | **Phase 1: App Creation & Install** | Create `custom_dashbords`, declare `required_apps`, install on site | **COMPLETED** | `bench new-app` succeeded; installed on `mittal.local`; listed in `bench --site mittal.local list-apps`. |
 | **Phase 2: Reference Investigation** | Audit `esoft_custom_bom` 4 dashboards, formulas, queries, and permissions | **COMPLETED** | Re-audited `sales_analytics`, `purchase_analytics`, `inventory_analytics`, `production_analytics`. |
 | **Phase 3: Specifications & Planning** | Author formal specs in `specs/` for all 4 dashboards | **COMPLETED** | Authored `specs/sales_dashboard.md`, `specs/purchase_dashboard.md`, `specs/inventory_dashboard.md`, `specs/production_dashboard.md`. |
-| **Phase 4: Dashboard Implementation** | Implement clean, parameterized pages & APIs | **PENDING** | Awaiting review of Phase 0-1 deliverables before executing code implementation. |
-| **Phase 5: Automated Testing** | Unit, KPI, company isolation, permission & security tests | **PENDING** | Test suite to be authored in `custom_dashbords/tests/`. |
-| **Phase 6: Independent Review** | Code quality, security, and final readiness review | **PENDING** | Review findings to be documented in `reviews.md`. |
+| **Phase 4: Dashboard Implementation** | Implement clean, parameterized pages & APIs | **IN PROGRESS** | **Sales Dashboard (`sales-analytics`) COMPLETED.** Implemented `api/permission_utils.py`, `api/sales_analytics.py` (26 endpoints), Desk Page `sales-analytics` (JSON, JS, CSS). Built assets and synced page. |
+| **Phase 5: Automated Testing** | Unit, KPI, company isolation, permission & security tests | **IN PROGRESS** | `test_sales_analytics.py` implemented (5 integration test methods covering all 26 endpoints, company isolation, SQL injection prevention, permissions, and calculations). All 5 tests passed (1.066s). |
+| **Phase 6: Independent Review** | Code quality, security, and final readiness review | **IN PROGRESS** | Sales Dashboard verified against SEC-01, SEC-03, SEC-04, BUG-03, BUG-04. |
 
 ---
 
-## 2. Key Environment Findings & Resolutions
+## 2. Dashboard Implementation Status
+
+| Dashboard | Route | Backend API | Desk Page | Tests | Status |
+|---|---|---|---|---|---|
+| **Sales Dashboard** | `/app/sales-analytics` | `custom_dashbords.api.sales_analytics` (26 endpoints) | `sales_analytics.json`, `sales_analytics.js`, `sales_analytics.css` | 5 integration tests passing | **COMPLETED & VERIFIED** |
+| **Purchase Dashboard** | `/app/purchase-analytics` | Pending | Pending | Pending | PENDING |
+| **Inventory Dashboard** | `/app/inventory-analytics` | Pending | Pending | Pending | PENDING |
+| **Production Dashboard** | `/app/production-analytics` | Pending | Pending | Pending | PENDING |
+
+---
+
+## 3. Key Environment Findings & Resolutions
 
 1. **Node.js Incompatibility Resolved:**
    - Problem: Node.js was defaulted to v18.20.8 via NVM, but Frappe v16 frontend build requires Node.js >=24.

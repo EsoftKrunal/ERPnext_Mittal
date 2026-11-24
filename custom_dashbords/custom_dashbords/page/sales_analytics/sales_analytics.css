@@ -1,0 +1,39 @@
+/* Sales Analytics Dashboard Styles */
+.sa-dash { padding:20px; font-family:'Inter',sans-serif; background:var(--bg-color,#f7fafc); min-height:100vh; }
+.sa-last-updated { text-align:right; font-size:12px; color:#718096; margin-bottom:8px; }
+.sa-kpi-row { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:14px; margin-bottom:20px; }
+.sa-kpi { background:#fff; border-radius:14px; padding:16px 10px; box-shadow:0 2px 8px rgba(0,0,0,.07); text-align:center; transition:transform .2s,box-shadow .2s; border-top:3px solid #4299e1; }
+.sa-kpi:hover { transform:translateY(-3px); box-shadow:0 6px 18px rgba(0,0,0,.12); }
+.sa-kpi.loading { opacity:.45; }
+.sa-kpi.danger  { border-top-color:#e53e3e; } .sa-kpi.danger .sa-kpi-val { color:#e53e3e; }
+.sa-kpi.warning { border-top-color:#ed8936; } .sa-kpi.warning .sa-kpi-val { color:#ed8936; } 
+.sa-kpi.success { border-top-color:#48bb78; } .sa-kpi.success .sa-kpi-val { color:#48bb78; }
+.sa-kpi-icon { font-size:22px; margin-bottom:6px; } .sa-kpi-val { font-size:24px; font-weight:800; color:#2d3748; } .sa-kpi-label { font-size:10px; color:#718096; margin-top:4px; text-transform:uppercase; letter-spacing:.5px; }
+.sa-row-2col { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }
+.sa-row-3col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:16px; }
+@media(max-width:900px){ .sa-row-2col, .sa-row-3col { grid-template-columns:1fr; } }
+.sa-chart-card { background:#fff; border-radius:14px; padding:18px; box-shadow:0 2px 8px rgba(0,0,0,.07); }
+.sa-chart-title { font-weight:700; font-size:11px; color:#4a5568; margin-bottom:12px; text-transform:uppercase; letter-spacing:.5px; }
+.sa-chart-body { min-height:240px; }
+.sa-table-card { margin-bottom:16px; }
+.sa-table-wrap { overflow-x:auto; }
+.sa-table { width:100%; border-collapse:collapse; font-size:13px; }
+.sa-table th { background:#f7fafc; color:#4a5568; font-weight:700; padding:10px 12px; text-align:left; border-bottom:2px solid #e2e8f0; font-size:11px; text-transform:uppercase; }
+.sa-table td { padding:9px 12px; border-bottom:1px solid #edf2f7; color:#2d3748; vertical-align:middle; }
+.sa-table td.num, .sa-table th.num { text-align:right; }
+.sa-table tr:hover td { background:#f0f7ff; }
+.sa-row-danger td { background:#fff5f5; } .sa-row-warning td { background:#fffaf0; }
+.sa-empty { text-align:center; color:#a0aec0; padding:32px !important; font-size:13px; }
+.sa-status-badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; }
+.sa-badge-green { background:#c6f6d5; color:#22543d; } .sa-badge-blue { background:#bee3f8; color:#2a4365; }
+.sa-badge-orange{ background:#feebc8; color:#7b341e; } .sa-badge-red  { background:#fed7d7; color:#742a2a; }
+.sa-badge-gray  { background:#e2e8f0; color:#4a5568; }
+.sa-spinner { width:36px; height:36px; border:3px solid #e2e8f0; border-top-color:#4299e1; border-radius:50%; animation:saspin .8s linear infinite; margin:60px auto; }
+@keyframes saspin { to { transform:rotate(360deg); } }
+a { cursor:pointer; color:#3182ce; } a:hover { text-decoration:underline; }
+.sa-active-filter-bar { display:inline-flex; flex-wrap:wrap; gap:6px; margin-left:12px; vertical-align:middle; }
+.sa-filter-chip { background:#ebf8ff; border:1px solid #bee3f8; border-radius:20px; padding:2px 10px; font-size:11px; color:#2b6cb0; }
+.sa-tabs { display:flex; gap:8px; border-bottom:1px solid #e2e8f0; margin-top:16px; margin-bottom:20px; }
+.sa-tab { padding:10px 20px; cursor:pointer; font-weight:600; font-size:14px; color:#718096; border-bottom:3px solid transparent; transition:all .2s; }
+.sa-tab:hover { color:#2b6cb0; background:#ebf8ff; border-radius:6px 6px 0 0; }
+.sa-tab.active { color:#2b6cb0; border-bottom-color:#3182ce; }
