@@ -28,7 +28,7 @@
 | **Sales Dashboard** | `/app/sales-analytics` | `custom_dashbords.api.sales_analytics` (26 endpoints) | `sales_analytics.json`, `sales_analytics.js`, `sales_analytics.css` | 8 integration tests passing (100%) | **READY FOR USER MANUAL VERIFICATION** |
 | **Purchase Dashboard** | `/app/purchase-analytics` | `custom_dashbords.api.purchase_analytics` (`get_po_data`) | `purchase_analytics.json`, `purchase_analytics.js`, `purchase_analytics.css` | 5 integration tests passing (100%) | **READY FOR USER MANUAL VERIFICATION** |
 | **Inventory Dashboard** | `/app/inventory-analytics` | `custom_dashbords.api.inventory_analytics` (4 endpoints) | `inventory_analytics.json`, `inventory_analytics.js`, `inventory_analytics.css` | 4 integration tests passing (100%) | **READY FOR USER MANUAL VERIFICATION** |
-| **Production Dashboard** | `/app/production-analytics` | `custom_dashbords.api.production_analytics` (16 endpoints) | `production_analytics.json`, `production_analytics.js`, `production_analytics.css` | 4 integration tests passing (100%) | **READY FOR USER MANUAL VERIFICATION** |
+| **Production Dashboard** | `/app/production-analytics` | `custom_dashbords.api.production_analytics` (17 endpoints incl. `get_production_plan_summary_report`) | `production_analytics.json`, `production_analytics.js`, `production_analytics.css` (incl. Plan Summary Report tree view) | 4 integration tests passing (100%) | **READY FOR USER MANUAL VERIFICATION** |
 
 ---
 

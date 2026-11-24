@@ -737,3 +737,252 @@ def get_job_card_time_tracking(**kwargs):
 		ORDER BY tl.from_time DESC
 		LIMIT 100
 	""", vals, as_dict=True)
+
+
+# ---------------------------------------------------------------------------
+# 17. Production Plan Summary Report (High Detail Tree & KPIs)
+# ---------------------------------------------------------------------------
+
+@frappe.whitelist()
+def get_production_plan_summary_report(**kwargs):
+	"""
+	Returns high-detail Production Plan Summary data compatible with ERPNext's standard
+	Production Plan Summary report, enhanced with company security, multi-plan support,
+	and structured hierarchical items and sub-assemblies for modern UI rendering.
+	"""
+	f = _parse_filters(kwargs)
+	_verify_production_permission(f["company"])
+	where, vals = _plan_conditions(f)
+
+	# Fetch available plans matching filter criteria
+	plans = frappe.db.sql(f"""
+		SELECT
+			pp.name,
+			pp.posting_date,
+			pp.status,
+			pp.total_planned_qty,
+			pp.total_produced_qty
+		FROM `tabProduction Plan` pp
+		WHERE {where}
+		ORDER BY pp.posting_date DESC, pp.creation DESC
+		LIMIT 50
+	""", vals, as_dict=True)
+
+	selected_plan = f.get("production_plan")
+	if not selected_plan and plans:
+		selected_plan = plans[0]["name"]
+
+	if not selected_plan:
+		return {
+			"plans": [],
+			"selected_plan": None,
+			"kpis": {
+				"total_fg_items": 0,
+				"total_sub_items": 0,
+				"total_planned_qty": 0.0,
+				"total_produced_qty": 0.0,
+				"total_pending_qty": 0.0,
+				"completion_pct": 0.0,
+				"status": "No Plans",
+				"posting_date": None,
+			},
+			"items": [],
+		}
+
+	# Ensure the selected plan belongs to the permitted company
+	plan_meta = frappe.db.get_value(
+		"Production Plan",
+		selected_plan,
+		["name", "company", "status", "posting_date", "total_planned_qty", "total_produced_qty"],
+		as_dict=True,
+	)
+	if not plan_meta or (f.get("company") and plan_meta.company != f["company"]):
+		frappe.throw(_("Production Plan not found or company mismatch."), frappe.PermissionError)
+
+	# Fetch Finished Good items
+	fg_items = frappe.db.sql("""
+		SELECT
+			poi.name AS plan_item_name,
+			poi.item_code,
+			COALESCE(i.item_name, poi.item_code) AS item_name,
+			poi.sales_order,
+			poi.planned_qty,
+			poi.produced_qty,
+			poi.pending_qty,
+			poi.bom_no,
+			poi.warehouse
+		FROM `tabProduction Plan Item` poi
+		LEFT JOIN `tabItem` i ON i.name = poi.item_code
+		WHERE poi.parent = %(plan)s
+		ORDER BY poi.idx ASC
+	""", {"plan": selected_plan}, as_dict=True)
+
+	# Fetch Work Orders linked to this plan
+	work_orders = frappe.db.sql("""
+		SELECT
+			wo.name,
+			wo.status,
+			wo.production_item,
+			wo.qty,
+			wo.produced_qty,
+			wo.sales_order,
+			wo.production_plan_item,
+			wo.production_plan_sub_assembly_item,
+			wo.planned_start_date,
+			wo.planned_end_date,
+			wo.actual_start_date,
+			wo.actual_end_date
+		FROM `tabWork Order` wo
+		WHERE wo.production_plan = %(plan)s AND wo.docstatus < 2
+		ORDER BY wo.creation ASC
+	""", {"plan": selected_plan}, as_dict=True)
+
+	# Map Work Orders by production_plan_item and sub_assembly
+	wo_by_item = {}
+	wo_by_sub = {}
+	for wo in work_orders:
+		if wo.get("production_plan_item"):
+			wo_by_item.setdefault(wo["production_plan_item"], []).append(wo)
+		if wo.get("production_plan_sub_assembly_item"):
+			wo_by_sub.setdefault(wo["production_plan_sub_assembly_item"], []).append(wo)
+
+	# Fetch Sub-assemblies for this plan
+	sub_assemblies = frappe.db.sql("""
+		SELECT
+			sub.name AS sub_assembly_id,
+			sub.production_plan_item,
+			sub.production_item AS item_code,
+			COALESCE(sub.item_name, sub.production_item) AS item_name,
+			sub.parent_item_code,
+			sub.bom_level,
+			sub.type_of_manufacturing,
+			sub.qty AS planned_qty,
+			sub.wo_produced_qty,
+			sub.received_qty,
+			sub.indent,
+			sub.supplier,
+			sub.purchase_order
+		FROM `tabProduction Plan Sub Assembly Item` sub
+		WHERE sub.parent = %(plan)s
+		ORDER BY sub.idx ASC
+	""", {"plan": selected_plan}, as_dict=True)
+
+	sub_by_item = {}
+	for sub in sub_assemblies:
+		parent_item_key = sub.get("production_plan_item") or sub.get("parent_item_code")
+		sub_by_item.setdefault(parent_item_key, []).append(sub)
+
+	# Fetch Purchase Orders linked to sub-assemblies if any
+	sub_po_map = {}
+	po_items = frappe.db.sql("""
+		SELECT
+			poi.parent AS po_name,
+			poi.name AS po_item_name,
+			poi.production_plan_sub_assembly_item,
+			poi.qty,
+			poi.received_qty,
+			po.status AS po_status
+		FROM `tabPurchase Order Item` poi
+		INNER JOIN `tabPurchase Order` po ON po.name = poi.parent
+		WHERE poi.production_plan = %(plan)s AND po.docstatus < 2
+	""", {"plan": selected_plan}, as_dict=True)
+	for poi in po_items:
+		if poi.get("production_plan_sub_assembly_item"):
+			sub_po_map.setdefault(poi["production_plan_sub_assembly_item"], []).append(poi)
+
+	# Construct structured report rows
+	report_items = []
+	tot_planned = 0.0
+	tot_produced = 0.0
+
+	for fg in fg_items:
+		fg_planned = flt(fg.get("planned_qty"))
+		fg_produced = flt(fg.get("produced_qty"))
+		linked_wos = wo_by_item.get(fg["plan_item_name"], [])
+
+		if not fg_produced and linked_wos:
+			fg_produced = sum(flt(w.get("produced_qty")) for w in linked_wos)
+
+		fg_pending = max(0.0, fg_planned - fg_produced)
+		fg_pct = round((fg_produced / fg_planned * 100), 2) if fg_planned else 0.0
+
+		tot_planned += fg_planned
+		tot_produced += fg_produced
+
+		# Build sub-assembly detail rows
+		fg_subs = sub_by_item.get(fg["plan_item_name"]) or sub_by_item.get(fg["item_code"]) or []
+		structured_subs = []
+		for s in fg_subs:
+			s_planned = flt(s.get("qty"))
+			s_type = s.get("type_of_manufacturing") or "Manufacture"
+			s_wos = wo_by_sub.get(s["sub_assembly_id"], [])
+			s_pos = sub_po_map.get(s["sub_assembly_id"], [])
+
+			if s_type == "Subcontract":
+				doc_type = "Purchase Order"
+				doc_name = s_pos[0]["po_name"] if s_pos else (s.get("purchase_order") or "")
+				s_produced = sum(flt(p.get("received_qty")) for p in s_pos) if s_pos else flt(s.get("received_qty"))
+				doc_status = s_pos[0]["po_status"] if s_pos else ("Submitted" if doc_name else "Pending")
+			else:
+				doc_type = "Work Order"
+				doc_name = s_wos[0]["name"] if s_wos else ""
+				s_produced = sum(flt(w.get("produced_qty")) for w in s_wos) if s_wos else flt(s.get("wo_produced_qty"))
+				doc_status = s_wos[0]["status"] if s_wos else ("Submitted" if doc_name else "Pending")
+
+			s_pending = max(0.0, s_planned - s_produced)
+			s_pct = round((s_produced / s_planned * 100), 2) if s_planned else 0.0
+
+			structured_subs.append({
+				"sub_assembly_id": s["sub_assembly_id"],
+				"item_code": s["item_code"],
+				"item_name": s["item_name"],
+				"bom_level": cint(s.get("bom_level") or 1),
+				"type": s_type,
+				"document_type": doc_type,
+				"document_name": doc_name,
+				"status": doc_status,
+				"planned_qty": s_planned,
+				"produced_qty": s_produced,
+				"pending_qty": s_pending,
+				"completion_pct": s_pct,
+			})
+
+		report_items.append({
+			"plan_item_name": fg["plan_item_name"],
+			"item_code": fg["item_code"],
+			"item_name": fg["item_name"],
+			"sales_order": fg.get("sales_order") or "",
+			"bom_no": fg.get("bom_no") or "",
+			"planned_qty": fg_planned,
+			"produced_qty": fg_produced,
+			"pending_qty": fg_pending,
+			"completion_pct": fg_pct,
+			"work_orders": [{
+				"name": w["name"],
+				"status": w["status"],
+				"qty": flt(w["qty"]),
+				"produced_qty": flt(w["produced_qty"]),
+				"actual_start": str(w.get("actual_start_date") or ""),
+				"actual_end": str(w.get("actual_end_date") or ""),
+			} for w in linked_wos],
+			"sub_assemblies": structured_subs,
+		})
+
+	tot_pending = max(0.0, tot_planned - tot_produced)
+	overall_pct = round((tot_produced / tot_planned * 100), 2) if tot_planned else 0.0
+
+	return {
+		"plans": plans,
+		"selected_plan": selected_plan,
+		"kpis": {
+			"total_fg_items": len(fg_items),
+			"total_sub_items": len(sub_assemblies),
+			"total_planned_qty": tot_planned,
+			"total_produced_qty": tot_produced,
+			"total_pending_qty": tot_pending,
+			"completion_pct": overall_pct,
+			"status": plan_meta.status,
+			"posting_date": str(plan_meta.posting_date or ""),
+		},
+		"items": report_items,
+	}

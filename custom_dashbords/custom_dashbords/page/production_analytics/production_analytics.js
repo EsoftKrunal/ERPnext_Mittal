@@ -36,6 +36,7 @@ frappe.pages["production-analytics"].on_page_load = function (wrapper) {
 
         <div class="pd-tabs">
             <div class="pd-tab active" id="tab-btn-plan" onclick="pd_switch_tab('plan')">Production Plan Overview</div>
+            <div class="pd-tab" id="tab-btn-summary" onclick="pd_switch_tab('summary')">Plan Summary Report</div>
             <div class="pd-tab" id="tab-btn-jc" onclick="pd_switch_tab('jc')">Lifecycle Drill-down</div>
         </div>
 
@@ -84,6 +85,106 @@ frappe.pages["production-analytics"].on_page_load = function (wrapper) {
         </div>
 
         </div><!-- End Tab Plan -->
+
+        <div id="tab-content-summary" class="pd-tab-pane" style="display:none;">
+            <!-- Modern Control Toolbar -->
+            <div class="pd-summary-toolbar">
+                <div class="pd-summary-toolbar-left">
+                    <label class="pd-toolbar-label">Production Plan:</label>
+                    <select id="sel-summary-plan" class="pd-select-plan" onchange="pd_on_plan_select(this.value)">
+                        <option value="">Loading Plans…</option>
+                    </select>
+                    <div class="pd-search-box">
+                        <input type="text" id="inp-summary-search" class="pd-search-input" placeholder="Search Finished Goods, Sub-assemblies, WOs, POs…" oninput="pd_filter_summary_table()">
+                        <span class="pd-search-icon">🔍</span>
+                    </div>
+                </div>
+                <div class="pd-summary-toolbar-right">
+                    <div class="pd-btn-group">
+                        <button class="pd-btn pd-btn-secondary" onclick="pd_toggle_all_tree(true)">Expand All</button>
+                        <button class="pd-btn pd-btn-secondary" onclick="pd_toggle_all_tree(false)">Collapse All</button>
+                    </div>
+                    <label class="pd-toggle-sub">
+                        <input type="checkbox" id="chk-show-sub" checked onchange="pd_filter_summary_table()">
+                        <span>Show Sub-assemblies</span>
+                    </label>
+                    <button class="pd-btn pd-btn-primary" onclick="pd_export_summary_csv()">
+                        📥 Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- KPI Cards for Selected Plan -->
+            <div class="pd-kpi-row" id="pd-summary-kpis">
+                <div class="pd-kpi" id="skpi-plan">
+                    <div class="pd-kpi-icon">📋</div>
+                    <div class="pd-kpi-val" id="skpi-plan-name" style="font-size: 15px; word-break: break-all;">—</div>
+                    <div class="pd-kpi-label">Status: <span id="skpi-plan-status" class="pd-status-pill pd-status-inprogress">—</span></div>
+                </div>
+                <div class="pd-kpi" id="skpi-items">
+                    <div class="pd-kpi-icon">📦</div>
+                    <div class="pd-kpi-val" id="skpi-fg-count">0</div>
+                    <div class="pd-kpi-label">Finished Goods (<span id="skpi-sub-count">0</span> Sub-assemblies)</div>
+                </div>
+                <div class="pd-kpi" id="skpi-target">
+                    <div class="pd-kpi-icon">🎯</div>
+                    <div class="pd-kpi-val" id="skpi-planned-qty">0</div>
+                    <div class="pd-kpi-label">Total Planned Target</div>
+                </div>
+                <div class="pd-kpi" id="skpi-produced">
+                    <div class="pd-kpi-icon">✅</div>
+                    <div class="pd-kpi-val" id="skpi-produced-qty">0</div>
+                    <div class="pd-kpi-label">Total Produced / Recv</div>
+                </div>
+                <div class="pd-kpi" id="skpi-pending">
+                    <div class="pd-kpi-icon">⏳</div>
+                    <div class="pd-kpi-val" id="skpi-pending-qty">0</div>
+                    <div class="pd-kpi-label">Total Pending Qty</div>
+                </div>
+                <div class="pd-kpi" id="skpi-rate">
+                    <div class="pd-kpi-icon">📊</div>
+                    <div class="pd-kpi-val" id="skpi-completion-pct">0%</div>
+                    <div class="pd-kpi-label">Overall Completion</div>
+                </div>
+            </div>
+
+            <!-- Execution Breakdown Table Card -->
+            <div class="pd-chart-card pd-summary-card">
+                <div class="pd-summary-card-header">
+                    <div class="pd-summary-card-title">
+                        <span>Production Plan Execution Breakdown</span>
+                        <span id="pd-summary-count-badge" class="pd-count-badge">0 items</span>
+                    </div>
+                    <div class="pd-status-filter-pills">
+                        <span class="pd-pill active" onclick="pd_filter_status('all', this)">All</span>
+                        <span class="pd-pill" onclick="pd_filter_status('completed', this)">Completed</span>
+                        <span class="pd-pill" onclick="pd_filter_status('in_progress', this)">In Progress</span>
+                        <span class="pd-pill" onclick="pd_filter_status('pending', this)">Pending</span>
+                    </div>
+                </div>
+                <div class="pd-table-wrap">
+                    <table class="pd-table pd-summary-tree-table" id="tbl-summary-report">
+                        <thead>
+                            <tr>
+                                <th style="width: 32px;"></th>
+                                <th style="min-width: 250px;">Finished Good / Sub-Assembly</th>
+                                <th style="width: 140px;">Sales Order</th>
+                                <th style="width: 150px;">Document Type</th>
+                                <th style="min-width: 160px;">Document Reference</th>
+                                <th class="num" style="width: 110px;">Planned Qty</th>
+                                <th class="num" style="width: 130px;">Produced / Recv</th>
+                                <th class="num" style="width: 110px;">Pending Qty</th>
+                                <th style="width: 180px;">Fulfillment %</th>
+                                <th style="width: 110px; text-align: center;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-summary-body">
+                            <tr><td colspan="10" class="pd-empty">Select a Production Plan to view the execution report.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div><!-- End Tab Summary -->
 
         <div id="tab-content-jc" class="pd-tab-pane" style="display:none;">
             <!-- In-Depth Drill-down -->
@@ -172,6 +273,7 @@ frappe.pages["production-analytics"].on_page_load = function (wrapper) {
         load_trend_line();
         load_item_table();
         load_drilldown();
+        load_production_plan_summary_report();
         $("#pd-last-ts").text(frappe.datetime.now_time());
     }
 
@@ -632,6 +734,280 @@ frappe.pages["production-analytics"].on_page_load = function (wrapper) {
         }});
     }
 
+    // ── Production Plan Summary Report ────────────────────────────────────
+    let _summary_data = null;
+    let _summary_selected_plan = null;
+    let _summary_status_filter = "all";
+
+    function load_production_plan_summary_report(plan_override) {
+        let args = Object.assign({}, _filters);
+        if (plan_override) args.production_plan = plan_override;
+        else if (_summary_selected_plan) args.production_plan = _summary_selected_plan;
+
+        $("#tbl-summary-body").html('<tr><td colspan="10" class="pd-empty"><div class="pd-spinner" style="margin:20px auto"></div>Loading Execution Breakdown…</td></tr>');
+
+        frappe.call({
+            method: API + "get_production_plan_summary_report",
+            args: args,
+            callback: function(r) {
+                if (!r.message) {
+                    $("#tbl-summary-body").html('<tr><td colspan="10" class="pd-empty">No Production Plan data available.</td></tr>');
+                    return;
+                }
+                let data = r.message;
+                _summary_data = data;
+                _summary_selected_plan = data.selected_plan;
+
+                // Populate plan select dropdown
+                let $sel = $("#sel-summary-plan");
+                $sel.empty();
+                if (data.plans && data.plans.length > 0) {
+                    data.plans.forEach(p => {
+                        let is_sel = (p.name === data.selected_plan) ? "selected" : "";
+                        $sel.append(`<option value="${p.name}" ${is_sel}>${p.name} (${p.status || "Draft"} - ${p.posting_date || ""})</option>`);
+                    });
+                } else {
+                    $sel.append('<option value="">No Plans Found</option>');
+                }
+
+                // Populate KPI strip
+                let k = data.kpis || {};
+                $("#skpi-plan-name").text(data.selected_plan || "—");
+                let st = k.status || "—";
+                let st_cls = st === "Completed" ? "pd-status-completed" : (st === "Delayed" ? "pd-status-overdue" : "pd-status-inprogress");
+                $("#skpi-plan-status").attr("class", "pd-status-pill " + st_cls).text(st);
+                $("#skpi-fg-count").text(fmt_num(k.total_fg_items, 0));
+                $("#skpi-sub-count").text(fmt_num(k.total_sub_items, 0));
+                $("#skpi-planned-qty").text(fmt_num(k.total_planned_qty, 0));
+                $("#skpi-produced-qty").text(fmt_num(k.total_produced_qty, 0));
+                $("#skpi-pending-qty").text(fmt_num(k.total_pending_qty, 0));
+                $("#skpi-completion-pct").text((k.completion_pct || 0) + "%");
+
+                // Render execution tree table
+                render_summary_tree_table(data.items || []);
+            }
+        });
+    }
+
+    function render_summary_tree_table(items) {
+        if (!items || items.length === 0) {
+            $("#tbl-summary-body").html('<tr><td colspan="10" class="pd-empty">No finished goods items found for this plan.</td></tr>');
+            $("#pd-summary-count-badge").text("0 items");
+            return;
+        }
+
+        $("#pd-summary-count-badge").text(items.length + " Finished Goods");
+
+        let html = "";
+        items.forEach((fg, idx) => {
+            let row_id = "fg-row-" + idx;
+            let has_subs = fg.sub_assemblies && fg.sub_assemblies.length > 0;
+            let pct = fg.completion_pct || 0;
+            let bar_color = pct >= 100 ? "green" : (pct > 0 ? "blue" : "gray");
+            let st_badge = pct >= 100 ? '<span class="pd-status-pill pd-status-completed">Completed</span>' :
+                          (pct > 0 ? '<span class="pd-status-pill pd-status-inprogress">In Progress</span>' :
+                                     '<span class="pd-status-pill pd-status-pending">Pending</span>');
+
+            let so_chip = fg.sales_order ? `<a href="/app/sales-order/${encodeURIComponent(fg.sales_order)}" class="pd-chip pd-chip-so" target="_blank">📋 ${frappe.utils.escape_html(fg.sales_order)}</a>` : '<span style="color:#a0aec0">—</span>';
+
+            let wo_chips = "";
+            if (fg.work_orders && fg.work_orders.length > 0) {
+                wo_chips = fg.work_orders.map(w => `<a href="/app/work-order/${encodeURIComponent(w.name)}" class="pd-chip pd-chip-wo" target="_blank">${frappe.utils.escape_html(w.name)}</a>`).join(" ");
+            } else {
+                wo_chips = '<span style="color:#a0aec0">—</span>';
+            }
+
+            html += `
+            <tr class="pd-fg-row" id="${row_id}" data-status="${pct >= 100 ? 'completed' : (pct > 0 ? 'in_progress' : 'pending')}">
+                <td style="text-align:center;">
+                    ${has_subs ? `<span class="pd-tree-expander" onclick="pd_toggle_tree_row('${row_id}')">▶</span>` : '<span class="pd-tree-expander empty">•</span>'}
+                </td>
+                <td>
+                    <div class="pd-fg-title">
+                        <span class="pd-item-code">${frappe.utils.escape_html(fg.item_code)}</span>
+                    </div>
+                    <div class="pd-item-name">${frappe.utils.escape_html(fg.item_name || "")}</div>
+                </td>
+                <td>${so_chip}</td>
+                <td><span class="pd-type-badge pd-type-fg">Finished Good</span></td>
+                <td>${wo_chips}</td>
+                <td class="num"><strong>${fmt_num(fg.planned_qty, 0)}</strong></td>
+                <td class="num">${fmt_num(fg.produced_qty, 0)}</td>
+                <td class="num" style="color: ${fg.pending_qty > 0 ? '#b45309' : '#15803d'}; font-weight:600;">${fmt_num(fg.pending_qty, 0)}</td>
+                <td>
+                    <div class="pd-prog-meta"><span>${pct}%</span><span>${fmt_num(fg.produced_qty,0)}/${fmt_num(fg.planned_qty,0)}</span></div>
+                    <div class="pd-prog-track"><div class="pd-prog-fill ${bar_color}" style="width: ${Math.min(100, pct)}%"></div></div>
+                </td>
+                <td style="text-align:center;">${st_badge}</td>
+            </tr>
+            `;
+
+            if (has_subs) {
+                fg.sub_assemblies.forEach(sub => {
+                    let sub_pct = sub.completion_pct || 0;
+                    let sub_bar = sub_pct >= 100 ? "green" : (sub_pct > 0 ? "blue" : "gray");
+                    let sub_st = sub_pct >= 100 ? '<span class="pd-status-pill pd-status-completed">Completed</span>' :
+                                 (sub_pct > 0 ? '<span class="pd-status-pill pd-status-inprogress">In Progress</span>' :
+                                                '<span class="pd-status-pill pd-status-pending">Pending</span>');
+                    let type_badge = sub.type === "Subcontract" ? '<span class="pd-type-badge pd-type-sub">Subcontract</span>' : '<span class="pd-type-badge pd-type-mfg">Manufacture</span>';
+                    let doc_route = sub.document_type === "Purchase Order" ? "purchase-order" : "work-order";
+                    let doc_chip = sub.document_name ? `<a href="/app/${doc_route}/${encodeURIComponent(sub.document_name)}" class="pd-chip ${sub.document_type === 'Purchase Order' ? 'pd-chip-po' : 'pd-chip-wo'}" target="_blank">${frappe.utils.escape_html(sub.document_name)}</a>` : '<span style="color:#a0aec0">Pending Creation</span>';
+
+                    html += `
+                    <tr class="pd-sub-row child-of-${row_id}" style="display:none;" data-parent="${row_id}" data-status="${sub_pct >= 100 ? 'completed' : (sub_pct > 0 ? 'in_progress' : 'pending')}">
+                        <td></td>
+                        <td>
+                            <div class="pd-tree-branch">
+                                <span class="pd-bom-level-tag">L${sub.bom_level}</span>
+                                <span style="font-weight:600; color:#4a5568;">${frappe.utils.escape_html(sub.item_code)}</span>
+                            </div>
+                            <div style="font-size:11.5px; color:#a0aec0; padding-left:26px;">${frappe.utils.escape_html(sub.item_name || "")}</div>
+                        </td>
+                        <td><span style="color:#cbd5e1">—</span></td>
+                        <td>${type_badge}</td>
+                        <td>${doc_chip}</td>
+                        <td class="num">${fmt_num(sub.planned_qty, 0)}</td>
+                        <td class="num">${fmt_num(sub.produced_qty, 0)}</td>
+                        <td class="num" style="color: ${sub.pending_qty > 0 ? '#b45309' : '#15803d'};">${fmt_num(sub.pending_qty, 0)}</td>
+                        <td>
+                            <div class="pd-prog-meta"><span>${sub_pct}%</span><span>${fmt_num(sub.produced_qty,0)}/${fmt_num(sub.planned_qty,0)}</span></div>
+                            <div class="pd-prog-track"><div class="pd-prog-fill ${sub_bar}" style="width: ${Math.min(100, sub_pct)}%"></div></div>
+                        </td>
+                        <td style="text-align:center;">${sub_st}</td>
+                    </tr>
+                    `;
+                });
+            }
+        });
+
+        $("#tbl-summary-body").html(html);
+        pd_filter_summary_table();
+    }
+
+    window.pd_toggle_tree_row = function(row_id) {
+        let $expander = $("#" + row_id + " .pd-tree-expander");
+        let is_expanded = $expander.hasClass("expanded");
+        if (is_expanded) {
+            $expander.removeClass("expanded").text("▶");
+            $("#" + row_id).removeClass("pd-row-expanded");
+            $(".child-of-" + row_id).hide();
+        } else {
+            $expander.addClass("expanded").text("▼");
+            $("#" + row_id).addClass("pd-row-expanded");
+            if ($("#chk-show-sub").is(":checked")) {
+                $(".child-of-" + row_id).show();
+            }
+        }
+    };
+
+    window.pd_toggle_all_tree = function(expand) {
+        if (expand) {
+            $(".pd-tree-expander:not(.empty)").addClass("expanded").text("▼");
+            $(".pd-fg-row").addClass("pd-row-expanded");
+            if ($("#chk-show-sub").is(":checked")) {
+                $(".pd-sub-row").show();
+            }
+        } else {
+            $(".pd-tree-expander:not(.empty)").removeClass("expanded").text("▶");
+            $(".pd-fg-row").removeClass("pd-row-expanded");
+            $(".pd-sub-row").hide();
+        }
+    };
+
+    window.pd_on_plan_select = function(plan_name) {
+        if (!plan_name) return;
+        _summary_selected_plan = plan_name;
+        load_production_plan_summary_report(plan_name);
+    };
+
+    window.pd_filter_status = function(status, el) {
+        _summary_status_filter = status;
+        $(".pd-status-filter-pills .pd-pill").removeClass("active");
+        $(el).addClass("active");
+        pd_filter_summary_table();
+    };
+
+    window.pd_filter_summary_table = function() {
+        let q = ($("#inp-summary-search").val() || "").toLowerCase().trim();
+        let show_subs = $("#chk-show-sub").is(":checked");
+        let st_filter = _summary_status_filter || "all";
+
+        $(".pd-fg-row").each(function() {
+            let $fg = $(this);
+            let row_id = $fg.attr("id");
+            let text = $fg.text().toLowerCase();
+            let row_st = $fg.data("status");
+
+            let matches_search = !q || text.includes(q);
+            let matches_status = (st_filter === "all") || (row_st === st_filter);
+
+            let $children = $(".child-of-" + row_id);
+            let child_matches_search = false;
+
+            if (q) {
+                $children.each(function() {
+                    if ($(this).text().toLowerCase().includes(q)) {
+                        child_matches_search = true;
+                    }
+                });
+            }
+
+            if ((matches_search && matches_status) || child_matches_search) {
+                $fg.show();
+                if (show_subs && $fg.find(".pd-tree-expander").hasClass("expanded")) {
+                    $children.each(function() {
+                        let c_st = $(this).data("status");
+                        let c_match_st = (st_filter === "all") || (c_st === st_filter);
+                        let c_text = $(this).text().toLowerCase();
+                        let c_match_q = !q || c_text.includes(q);
+                        if (c_match_st && c_match_q) $(this).show();
+                        else $(this).hide();
+                    });
+                } else {
+                    $children.hide();
+                }
+            } else {
+                $fg.hide();
+                $children.hide();
+            }
+        });
+    };
+
+    window.pd_export_summary_csv = function() {
+        if (!_summary_data || !_summary_data.items || _summary_data.items.length === 0) {
+            frappe.msgprint(__("No data available to export."));
+            return;
+        }
+
+        let csv = [
+            ["Type", "BOM Level", "Item Code", "Item Name", "Sales Order", "Doc Type", "Doc Name", "Planned Qty", "Produced Qty", "Pending Qty", "Fulfillment %", "Status"]
+        ];
+
+        _summary_data.items.forEach(fg => {
+            let wo_str = (fg.work_orders || []).map(w => w.name).join("; ");
+            let fg_st = fg.completion_pct >= 100 ? "Completed" : (fg.completion_pct > 0 ? "In Progress" : "Pending");
+            csv.push([
+                "Finished Good", "0", fg.item_code, fg.item_name, fg.sales_order, "Work Order", wo_str, fg.planned_qty, fg.produced_qty, fg.pending_qty, fg.completion_pct + "%", fg_st
+            ]);
+
+            (fg.sub_assemblies || []).forEach(sub => {
+                let sub_st = sub.completion_pct >= 100 ? "Completed" : (sub.completion_pct > 0 ? "In Progress" : "Pending");
+                csv.push([
+                    "Sub-Assembly", sub.bom_level, sub.item_code, sub.item_name, "", sub.document_type, sub.document_name, sub.planned_qty, sub.produced_qty, sub.pending_qty, sub.completion_pct + "%", sub_st
+                ]);
+            });
+        });
+
+        let csv_content = "data:text/csv;charset=utf-8," + csv.map(e => e.map(cell => `"${(cell || "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
+        let encodedUri = encodeURI(csv_content);
+        let link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `Production_Plan_Summary_${_summary_selected_plan || "Export"}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     window.pd_toggle = id => { $("#"+id).toggle(); };
 
     window.pd_switch_tab = function(tab) {
@@ -639,6 +1015,9 @@ frappe.pages["production-analytics"].on_page_load = function (wrapper) {
         $("#tab-btn-"+tab).addClass("active");
         $(".pd-tab-pane").hide();
         $("#tab-content-"+tab).show();
+        if (tab === "summary" && (!_summary_data || !_summary_data.items)) {
+            load_production_plan_summary_report();
+        }
     };
 
     // ── URL filter persistence ────────────────────────────────────────────
@@ -749,6 +1128,88 @@ function inject_prod_styles() {
 .pd-mini-bar { flex: 1; height: 6px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
 .pd-mini-bar div { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
 .pd-pct-wrap span { min-width: 45px; text-align: right; font-size: 11px; }
+
+/* ── Modern Summary Report Styles ── */
+.pd-summary-toolbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; background:#fff; padding:14px 18px; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.05); margin-bottom:16px; border:1px solid #e2e8f0; }
+.pd-summary-toolbar-left { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.pd-summary-toolbar-right { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.pd-toolbar-label { font-weight:700; font-size:12px; color:#4a5568; margin:0; text-transform:uppercase; letter-spacing:.5px; }
+.pd-select-plan { padding:6px 12px; border:1px solid #cbd5e0; border-radius:6px; font-size:13px; font-weight:600; color:#2d3748; background:#fff; min-width:200px; max-width:320px; outline:none; }
+.pd-select-plan:focus { border-color:#3182ce; box-shadow:0 0 0 1px #3182ce; }
+.pd-search-box { position:relative; display:inline-block; }
+.pd-search-input { padding:6px 12px 6px 32px; border:1px solid #cbd5e0; border-radius:6px; font-size:13px; color:#2d3748; width:260px; outline:none; transition:border-color .2s; }
+.pd-search-input:focus { border-color:#3182ce; box-shadow:0 0 0 1px #3182ce; }
+.pd-search-icon { position:absolute; left:9px; top:50%; transform:translateY(-50%); font-size:13px; color:#a0aec0; pointer-events:none; }
+.pd-btn-group { display:inline-flex; border-radius:6px; overflow:hidden; border:1px solid #cbd5e0; }
+.pd-btn-group button { border-radius:0; border:none; border-right:1px solid #cbd5e0; margin:0; }
+.pd-btn-group button:last-child { border-right:none; }
+.pd-btn { padding:6px 14px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer; transition:all .2s; border:1px solid transparent; display:inline-flex; align-items:center; gap:6px; }
+.pd-btn-primary { background:#3182ce; color:#fff; border-color:#3182ce; }
+.pd-btn-primary:hover { background:#2b6cb0; border-color:#2b6cb0; }
+.pd-btn-secondary { background:#f7fafc; color:#4a5568; }
+.pd-btn-secondary:hover { background:#edf2f7; color:#2d3748; }
+.pd-toggle-sub { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:#4a5568; cursor:pointer; margin:0; user-select:none; }
+.pd-toggle-sub input { cursor:pointer; accent-color:#3182ce; }
+
+.pd-summary-card { background:#fff; border-radius:12px; border:1px solid #e2e8f0; box-shadow:0 2px 8px rgba(0,0,0,.06); overflow:hidden; }
+.pd-summary-card-header { display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid #edf2f7; background:#fafbfc; flex-wrap:wrap; gap:10px; }
+.pd-summary-card-title { font-size:14px; font-weight:700; color:#2d3748; display:flex; align-items:center; gap:10px; }
+.pd-count-badge { background:#e2e8f0; color:#4a5568; font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px; }
+.pd-status-filter-pills { display:inline-flex; gap:6px; }
+.pd-pill { font-size:11px; font-weight:600; padding:3px 10px; border-radius:14px; cursor:pointer; background:#edf2f7; color:#4a5568; transition:all .2s; }
+.pd-pill:hover { background:#e2e8f0; }
+.pd-pill.active { background:#3182ce; color:#fff; }
+
+/* Tree Table Styles */
+.pd-summary-tree-table { font-size:13px; }
+.pd-summary-tree-table th { background:#f8fafc; font-size:11px; color:#4a5568; font-weight:700; text-transform:uppercase; letter-spacing:.5px; padding:11px 12px; border-bottom:2px solid #e2e8f0; }
+.pd-summary-tree-table td { padding:10px 12px; border-bottom:1px solid #edf2f7; }
+
+/* Finished Good Row */
+.pd-fg-row td { background:#fff; font-weight:500; }
+.pd-fg-row:hover td { background:#f7fafc; }
+.pd-fg-row.pd-row-expanded td { background:#f8fafc; border-bottom-color:#e2e8f0; }
+.pd-tree-expander { display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:4px; background:#edf2f7; color:#4a5568; font-size:11px; cursor:pointer; transition:all .2s; margin-right:4px; user-select:none; }
+.pd-tree-expander:hover { background:#e2e8f0; color:#2d3748; }
+.pd-tree-expander.expanded { transform:rotate(90deg); background:#bee3f8; color:#2b6cb0; }
+.pd-tree-expander.empty { opacity:0.3; cursor:default; }
+.pd-fg-title { display:flex; align-items:center; gap:8px; }
+.pd-item-code { font-weight:700; color:#2b6cb0; }
+.pd-item-name { font-size:12px; color:#718096; }
+
+/* Sub Assembly Row */
+.pd-sub-row td { background:#fafbfc; font-size:12.5px; border-bottom:1px solid #f1f5f9; }
+.pd-sub-row:hover td { background:#f1f5f9; }
+.pd-tree-branch { display:inline-flex; align-items:center; gap:6px; padding-left:26px; position:relative; }
+.pd-tree-branch::before { content:''; position:absolute; left:14px; top:0; bottom:50%; width:10px; border-left:2px solid #cbd5e0; border-bottom:2px solid #cbd5e0; }
+.pd-bom-level-tag { background:#edf2f7; color:#4a5568; font-size:10px; font-weight:700; padding:1px 6px; border-radius:4px; }
+
+/* Link Chips & Badges */
+.pd-chip { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:600; text-decoration:none; }
+.pd-chip-so { background:#fef3c7; color:#92400e; border:1px solid #fde68a; }
+.pd-chip-wo { background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe; margin-right:4px; margin-bottom:2px; }
+.pd-chip-po { background:#ccfbf1; color:#115e59; border:1px solid #99f6e4; }
+.pd-type-badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:12px; text-transform:uppercase; display:inline-block; }
+.pd-type-fg { background:#e2e8f0; color:#334155; }
+.pd-type-mfg { background:#ede9fe; color:#5b21b6; }
+.pd-type-sub { background:#cffafe; color:#155e75; }
+
+/* Modern Progress Track */
+.pd-prog-track { width:100%; height:8px; background:#e2e8f0; border-radius:4px; overflow:hidden; position:relative; margin-top:2px; }
+.pd-prog-fill { height:100%; border-radius:4px; transition:width .4s ease; }
+.pd-prog-fill.green { background:#10b981; }
+.pd-prog-fill.blue  { background:#3b82f6; }
+.pd-prog-fill.amber { background:#f59e0b; }
+.pd-prog-fill.gray  { background:#94a3b8; }
+.pd-prog-meta { display:flex; justify-content:space-between; font-size:11px; font-weight:600; margin-bottom:2px; }
+
+/* Status Badges */
+.pd-status-pill { display:inline-block; font-size:11px; font-weight:700; padding:2px 10px; border-radius:12px; text-align:center; }
+.pd-status-completed { background:#d1fae5; color:#065f46; }
+.pd-status-inprogress { background:#dbeafe; color:#1e40af; }
+.pd-status-pending { background:#fef3c7; color:#92400e; }
+.pd-status-overdue { background:#fee2e2; color:#991b1b; }
+.pd-status-stopped { background:#f1f5f9; color:#475569; }
     `;
     document.head.appendChild(s);
 }

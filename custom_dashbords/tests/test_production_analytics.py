@@ -108,6 +108,12 @@ class TestProductionAnalytics(IntegrationTestCase):
 		res_time = production_analytics.get_job_card_time_tracking(**f)
 		self.assertIsInstance(res_time, list)
 
+		res_report = production_analytics.get_production_plan_summary_report(**f)
+		self.assertIn("plans", res_report)
+		self.assertIn("items", res_report)
+		self.assertIn("kpis", res_report)
+		self.assertIsInstance(res_report["items"], list)
+
 	def test_company_isolation(self):
 		"""Verify cross-company data isolation and unauthorized access blocking."""
 		company_2 = "_Test_Prod_Co_2"
@@ -153,11 +159,17 @@ class TestProductionAnalytics(IntegrationTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			production_analytics.get_production_plan_kpis(company=company_2)
 
+		with self.assertRaises(frappe.PermissionError):
+			production_analytics.get_production_plan_summary_report(company=company_2)
+
 	def test_permissions_and_guest_rejection(self):
 		"""Verify Guest is blocked and valid roles have desk & API access."""
 		frappe.set_user("Guest")
 		with self.assertRaises(frappe.PermissionError):
 			production_analytics.get_production_plan_kpis()
+
+		with self.assertRaises(frappe.PermissionError):
+			production_analytics.get_production_plan_summary_report()
 
 		with self.assertRaises(frappe.PermissionError):
 			production_analytics.get_job_card_kpis()

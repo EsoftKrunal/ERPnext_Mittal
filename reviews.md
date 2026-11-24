@@ -40,6 +40,7 @@ Based on the audit of previous implementations (`frappe_dashboards` and `esoft_c
     - `tabMaterial Request`: Joined through child table `tabMaterial Request Item` (`mri.production_plan = pp.name`) where standard ERPNext links the Production Plan.
     - `tabMaterial Request Plan Item`: Standard ERPNext field is `quantity` (instead of site-specific `required_qty`), resolved dynamically via `_mr_plan_item_qty_col()`.
   - Desk Page (`custom_dashbords/page/production_analytics/`): 4 tabs (Overview, Workstation Load, Lead Time & Delays, Production Plans & Orders).
+  - Enhanced Feature — Production Plan Summary Report: Added dedicated `Plan Summary Report` tab in `production-analytics` with interactive plan switcher, real-time search, status filter pills, sub-assembly tree expansion/collapse, CSV export, and 6 summary KPI cards. Backed by whitelisted `get_production_plan_summary_report` with strict company isolation and multi-plan support.
 
 ---
 
