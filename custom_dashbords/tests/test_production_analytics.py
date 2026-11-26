@@ -114,6 +114,12 @@ class TestProductionAnalytics(IntegrationTestCase):
 		self.assertIn("kpis", res_report)
 		self.assertIsInstance(res_report["items"], list)
 
+		res_pending = production_analytics.get_pending_production_items_report(**f)
+		self.assertIn("columns", res_pending)
+		self.assertIn("rows", res_pending)
+		self.assertIn("summary", res_pending)
+		self.assertIsInstance(res_pending["rows"], list)
+
 	def test_company_isolation(self):
 		"""Verify cross-company data isolation and unauthorized access blocking."""
 		company_2 = "_Test_Prod_Co_2"

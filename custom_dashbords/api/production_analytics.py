@@ -986,3 +986,79 @@ def get_production_plan_summary_report(**kwargs):
 		},
 		"items": report_items,
 	}
+
+
+@frappe.whitelist()
+def get_pending_production_items_report(**kwargs):
+	"""
+	Returns data matching the 'Pending Production Item V1 - All Companies' report
+	with optional company filtering, parameterized SQL, and company permissions.
+	"""
+	company = kwargs.get("company")
+	if company:
+		_verify_production_permission(company)
+
+	params = {}
+	company_clause = ""
+	if company:
+		company_clause = "AND so.company = %(company)s"
+		params["company"] = company
+
+	query = f"""
+		SELECT
+			COALESCE(ig.parent_item_group, '') AS parent_item_group,
+			i.item_group AS item_group,
+			ROUND(SUM(soi.qty - IFNULL(soi.delivered_qty, 0))) AS pending_qty,
+			soi.uom AS uom
+		FROM
+			`tabSales Order` so
+		INNER JOIN
+			`tabSales Order Item` soi
+				ON soi.parent = so.name
+		LEFT JOIN
+			`tabItem` i
+				ON i.name = soi.item_code
+		LEFT JOIN
+			`tabItem Group` ig
+				ON ig.name = i.item_group
+		WHERE
+			so.docstatus = 1
+			AND so.status NOT IN (
+				'Closed',
+				'Stopped',
+				'On Hold',
+				'Completed'
+			)
+			AND (
+				soi.qty - IFNULL(soi.delivered_qty, 0)
+			) > 0
+			{company_clause}
+		GROUP BY
+			i.item_group,
+			ig.parent_item_group,
+			soi.uom
+		ORDER BY
+			i.item_group ASC
+	"""
+
+	rows = frappe.db.sql(query, params, as_dict=True)
+
+	total_qty = sum(flt(r.get("pending_qty", 0)) for r in rows)
+	parent_groups = len(set(r.get("parent_item_group") for r in rows if r.get("parent_item_group")))
+
+	return {
+		"columns": [
+			{"label": "Parent Item Group", "fieldname": "parent_item_group", "width": 180},
+			{"label": "Item Group", "fieldname": "item_group", "width": 220},
+			{"label": "Pending Qty", "fieldname": "pending_qty", "width": 140, "type": "Int"},
+			{"label": "UOM", "fieldname": "uom", "width": 100},
+		],
+		"rows": rows,
+		"summary": {
+			"total_pending_qty": total_qty,
+			"total_rows": len(rows),
+			"total_parent_groups": parent_groups,
+			"company": company or "All Companies",
+		},
+	}
+
