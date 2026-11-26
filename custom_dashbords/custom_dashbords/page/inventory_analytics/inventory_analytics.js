@@ -42,7 +42,7 @@ frappe.pages["inventory-analytics"].on_page_load = function (wrapper) {
         label: __("Company"),
         fieldtype: "Link",
         options: "Company",
-        default: frappe.defaults.get_user_default("Company") || "e",
+        default: frappe.defaults.get_default("company") || frappe.defaults.get_user_default("Company") || "",
         change: () => refresh_data()
     });
     

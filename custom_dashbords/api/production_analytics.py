@@ -995,8 +995,13 @@ def get_pending_production_items_report(**kwargs):
 	with optional company filtering, parameterized SQL, and company permissions.
 	"""
 	company = kwargs.get("company")
-	if company:
-		_verify_production_permission(company)
+	if company and company not in ("All Companies", "All", ""):
+		if frappe.db.exists("Company", company):
+			_verify_production_permission(company)
+		else:
+			company = None
+	else:
+		company = None
 
 	params = {}
 	company_clause = ""

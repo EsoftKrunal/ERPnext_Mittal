@@ -11,7 +11,7 @@ frappe.pages["production-analytics"].on_page_load = function (wrapper) {
     inject_prod_styles();
 
     // ── Filter bar fields (Frappe Page toolbar) ──────────────────────────
-    let def_company = frappe.defaults.get_user_default("Company") || "e";
+    let def_company = frappe.defaults.get_default("company") || frappe.defaults.get_user_default("Company") || "";
     let f_comp = page.add_field({ fieldname:"company", label:__("Company"), fieldtype:"Link", options:"Company", default: def_company, change: () => apply_filters() });
     let f_from = page.add_field({ fieldname:"from_date", label:__("From Date"), fieldtype:"Date", change: () => apply_filters() });
     let f_to   = page.add_field({ fieldname:"to_date",   label:__("To Date"),   fieldtype:"Date", change: () => apply_filters() });

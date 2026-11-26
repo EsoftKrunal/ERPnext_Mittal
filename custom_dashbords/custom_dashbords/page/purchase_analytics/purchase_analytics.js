@@ -12,7 +12,7 @@ frappe.pages["purchase-analytics"].on_page_load = function (wrapper) {
     var main_container = $('<div class="purchase-analytics-dashboard"></div>').appendTo(page.main);
     
     // Define filters
-    let def_company = frappe.defaults.get_user_default("Company") || "e";
+    let def_company = frappe.defaults.get_default("company") || frappe.defaults.get_user_default("Company") || "";
     let company_filter = page.add_field({
         fieldname: "company",
         label: __("Company"),
