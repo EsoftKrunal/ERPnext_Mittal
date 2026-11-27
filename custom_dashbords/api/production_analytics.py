@@ -1051,6 +1051,44 @@ def get_pending_production_items_report(**kwargs):
 	total_qty = sum(flt(r.get("pending_qty", 0)) for r in rows)
 	parent_groups = len(set(r.get("parent_item_group") for r in rows if r.get("parent_item_group")))
 
+	# Aggregations for Production Analytics Charts
+	# 1. Top 10 Item Groups by Pending Qty
+	top_groups = sorted(rows, key=lambda x: flt(x.get("pending_qty", 0)), reverse=True)[:10]
+	top_item_groups = [{"item_group": r["item_group"], "pending_qty": r["pending_qty"]} for r in top_groups]
+
+	# 2. Parent Category Split
+	parent_aggr = {}
+	for r in rows:
+		pg = r.get("parent_item_group") or "Others"
+		parent_aggr[pg] = parent_aggr.get(pg, 0.0) + flt(r.get("pending_qty", 0))
+	sorted_parents = sorted(parent_aggr.items(), key=lambda x: x[1], reverse=True)
+	if len(sorted_parents) > 6:
+		top_parents = [{"parent_group": k, "pending_qty": v} for k, v in sorted_parents[:6]]
+		top_parents.append({"parent_group": "Others", "pending_qty": sum(v for _, v in sorted_parents[6:])})
+	else:
+		top_parents = [{"parent_group": k, "pending_qty": v} for k, v in sorted_parents]
+
+	# 3. Company Split
+	comp_query = f"""
+		SELECT
+			so.company,
+			ROUND(SUM(soi.qty - IFNULL(soi.delivered_qty, 0))) AS pending_qty
+		FROM
+			`tabSales Order` so
+		INNER JOIN
+			`tabSales Order Item` soi ON soi.parent = so.name
+		WHERE
+			so.docstatus = 1
+			AND so.status NOT IN ('Closed', 'Stopped', 'On Hold', 'Completed')
+			AND (soi.qty - IFNULL(soi.delivered_qty, 0)) > 0
+			{company_clause}
+		GROUP BY
+			so.company
+		ORDER BY
+			pending_qty DESC
+	"""
+	company_split = frappe.db.sql(comp_query, params, as_dict=True)
+
 	return {
 		"columns": [
 			{"label": "Parent Item Group", "fieldname": "parent_item_group", "width": 180},
@@ -1064,6 +1102,11 @@ def get_pending_production_items_report(**kwargs):
 			"total_rows": len(rows),
 			"total_parent_groups": parent_groups,
 			"company": company or "All Companies",
+		},
+		"charts": {
+			"top_item_groups": top_item_groups,
+			"parent_group_split": top_parents,
+			"company_split": company_split,
 		},
 	}
 

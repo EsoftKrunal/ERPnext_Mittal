@@ -828,3 +828,354 @@ def get_customer_activity_table(**kwargs):
 		GROUP BY t.customer
 		ORDER BY days_since_last_order DESC LIMIT 100
 	""", so_vals, as_dict=True)
+
+
+# ---------------------------------------------------------------------------
+# TAB 5: Sales Order Analysis Report (Native Mittal Report with Analytics)
+# ---------------------------------------------------------------------------
+
+@frappe.whitelist()
+def get_sales_order_analysis_report(**kwargs):
+	verify_read_permission("Sales Order")
+	
+	company = kwargs.get("company")
+	if company and company not in ("All Companies", "All", ""):
+		if frappe.db.exists("Company", company):
+			verify_company_permission(company)
+		else:
+			company = None
+	else:
+		company = None
+
+	conds = [
+		"so.docstatus = 1",
+		"so.status NOT IN ('Closed', 'Stopped', 'On Hold', 'Completed')",
+		"(soi.qty - IFNULL(soi.delivered_qty, 0)) > 0",
+	]
+	vals = {}
+
+	if company:
+		conds.append("so.company = %(company)s")
+		vals["company"] = company
+	if kwargs.get("from_date"):
+		conds.append("so.transaction_date >= %(from_date)s")
+		vals["from_date"] = kwargs["from_date"]
+	if kwargs.get("to_date"):
+		conds.append("so.transaction_date <= %(to_date)s")
+		vals["to_date"] = kwargs["to_date"]
+	if kwargs.get("customer"):
+		conds.append("so.customer = %(customer)s")
+		vals["customer"] = kwargs["customer"]
+	if kwargs.get("customer_group"):
+		conds.append("c.customer_group = %(customer_group)s")
+		vals["customer_group"] = kwargs["customer_group"]
+	if kwargs.get("territory"):
+		conds.append("so.territory = %(territory)s")
+		vals["territory"] = kwargs["territory"]
+	if kwargs.get("item_group"):
+		conds.append("(i.item_group = %(item_group)s OR ig.parent_item_group = %(item_group)s)")
+		vals["item_group"] = kwargs["item_group"]
+	if kwargs.get("in_brand"):
+		conds.append("soi.custom_inbrand = %(in_brand)s")
+		vals["in_brand"] = kwargs["in_brand"]
+
+	where_clause = " AND ".join(conds)
+
+	query = f"""
+		SELECT
+			so.company,
+			so.customer,
+			COALESCE(c.customer_name, so.customer) AS customer_name,
+			COALESCE(NULLIF(so.custom_sales_order_no, ''), so.name) AS sales_order_no,
+			so.name AS so_name,
+			so.transaction_date AS date,
+			soi.delivery_date,
+			soi.item_code,
+			soi.item_name,
+			COALESCE(NULLIF(soi.custom_inbrand, ''), '-') AS in_brand,
+			COALESCE(NULLIF(ig.parent_item_group, ''), '-') AS parent_item_group,
+			COALESCE(NULLIF(i.item_group, ''), '-') AS item_group,
+			CASE
+				WHEN so.currency = 'USD' THEN CONCAT('$ ', FORMAT(soi.rate, 4))
+				WHEN so.currency = 'INR' THEN CONCAT('₹ ', FORMAT(soi.rate, 4))
+				ELSE CONCAT(so.currency, ' ', FORMAT(soi.rate, 4))
+			END AS rate,
+			soi.rate AS raw_rate,
+			so.currency,
+			soi.qty AS order_qty,
+			ROUND(soi.qty - IFNULL(soi.delivered_qty, 0)) AS pending_qty,
+			soi.uom
+		FROM
+			`tabSales Order` so
+		INNER JOIN
+			`tabSales Order Item` soi ON soi.parent = so.name
+		LEFT JOIN
+			`tabCustomer` c ON c.name = so.customer
+		LEFT JOIN
+			`tabItem` i ON i.name = soi.item_code
+		LEFT JOIN
+			`tabItem Group` ig ON ig.name = i.item_group
+		WHERE
+			{where_clause}
+		ORDER BY
+			so.transaction_date ASC,
+			soi.item_code ASC
+	"""
+
+	rows = frappe.db.sql(query, vals, as_dict=True)
+
+	# Aggregate KPIs
+	total_orders = len(set(r.get("so_name") for r in rows if r.get("so_name")))
+	total_order_qty = sum(flt(r.get("order_qty", 0)) for r in rows)
+	total_pending_qty = sum(flt(r.get("pending_qty", 0)) for r in rows)
+	total_customers = len(set(r.get("customer") for r in rows if r.get("customer")))
+	total_brands = len(set(r.get("in_brand") for r in rows if r.get("in_brand") and r.get("in_brand") != "-"))
+
+	# Aggregate Charts
+	# 1. Top Customers by Pending Qty
+	cust_aggr = {}
+	for r in rows:
+		c_name = r.get("customer_name") or r.get("customer") or "Unknown"
+		cust_aggr[c_name] = cust_aggr.get(c_name, 0.0) + flt(r.get("pending_qty", 0))
+	sorted_cust = sorted(cust_aggr.items(), key=lambda x: x[1], reverse=True)[:5]
+	top_customers = [{"customer": k, "pending_qty": v} for k, v in sorted_cust]
+
+	# 2. Brand Split by Pending Qty
+	brand_aggr = {}
+	for r in rows:
+		b = r.get("in_brand") or "No Brand"
+		brand_aggr[b] = brand_aggr.get(b, 0.0) + flt(r.get("pending_qty", 0))
+	sorted_brand = sorted(brand_aggr.items(), key=lambda x: x[1], reverse=True)
+	if len(sorted_brand) > 5:
+		top_brands = [{"brand": k, "pending_qty": v} for k, v in sorted_brand[:5]]
+		other_qty = sum(v for _, v in sorted_brand[5:])
+		top_brands.append({"brand": "Others", "pending_qty": other_qty})
+	else:
+		top_brands = [{"brand": k, "pending_qty": v} for k, v in sorted_brand]
+
+	# 3. Parent Item Group Split
+	parent_aggr = {}
+	for r in rows:
+		pg = r.get("parent_item_group") or "Others"
+		parent_aggr[pg] = parent_aggr.get(pg, 0.0) + flt(r.get("pending_qty", 0))
+	sorted_parent = sorted(parent_aggr.items(), key=lambda x: x[1], reverse=True)
+	if len(sorted_parent) > 5:
+		top_parents = [{"parent_group": k, "pending_qty": v} for k, v in sorted_parent[:5]]
+		other_p_qty = sum(v for _, v in sorted_parent[5:])
+		top_parents.append({"parent_group": "Others", "pending_qty": other_p_qty})
+	else:
+		top_parents = [{"parent_group": k, "pending_qty": v} for k, v in sorted_parent]
+
+	# 4. Company Split
+	comp_aggr = {}
+	for r in rows:
+		co = r.get("company") or "Unknown"
+		comp_aggr[co] = comp_aggr.get(co, 0.0) + flt(r.get("pending_qty", 0))
+	company_split = [{"company": k, "pending_qty": v} for k, v in comp_aggr.items()]
+
+	return {
+		"columns": [
+			{"label": "Company", "fieldname": "company", "width": 140},
+			{"label": "Customer", "fieldname": "customer", "width": 120},
+			{"label": "Customer Name", "fieldname": "customer_name", "width": 180},
+			{"label": "Sales Order No", "fieldname": "sales_order_no", "width": 150},
+			{"label": "Date", "fieldname": "date", "width": 100},
+			{"label": "Delivery Date", "fieldname": "delivery_date", "width": 110},
+			{"label": "Item Code", "fieldname": "item_code", "width": 110},
+			{"label": "Item Name", "fieldname": "item_name", "width": 180},
+			{"label": "In Brand", "fieldname": "in_brand", "width": 120},
+			{"label": "Parent Item Group", "fieldname": "parent_item_group", "width": 150},
+			{"label": "Item Group", "fieldname": "item_group", "width": 150},
+			{"label": "Rate", "fieldname": "rate", "width": 110},
+			{"label": "Order Qty", "fieldname": "order_qty", "width": 100, "type": "Int"},
+			{"label": "Pending Qty", "fieldname": "pending_qty", "width": 110, "type": "Int"},
+			{"label": "UOM", "fieldname": "uom", "width": 80},
+		],
+		"rows": rows,
+		"summary": {
+			"total_orders": total_orders,
+			"total_order_qty": total_order_qty,
+			"total_pending_qty": total_pending_qty,
+			"total_customers": total_customers,
+			"total_brands": total_brands,
+			"total_rows": len(rows),
+			"company": company or "All Companies",
+		},
+		"charts": {
+			"top_customers": top_customers,
+			"brand_split": top_brands,
+			"parent_group_split": top_parents,
+			"company_split": company_split,
+		},
+	}
+
+
+# ---------------------------------------------------------------------------
+# TAB 6: Pending Order Report (Native Mittal Report with Analytics)
+# ---------------------------------------------------------------------------
+
+@frappe.whitelist()
+def get_pending_order_report(**kwargs):
+	verify_read_permission("Sales Order")
+
+	company = kwargs.get("company")
+	if company and company not in ("All Companies", "All", ""):
+		if frappe.db.exists("Company", company):
+			verify_company_permission(company)
+		else:
+			company = None
+	else:
+		company = None
+
+	conds = [
+		"so.docstatus = 1",
+		"so.status NOT IN ('Closed', 'Stopped', 'On Hold', 'Completed')",
+		"(soi.qty - IFNULL(soi.delivered_qty, 0)) > 0",
+	]
+	vals = {}
+
+	if company:
+		conds.append("so.company = %(company)s")
+		vals["company"] = company
+	if kwargs.get("from_date"):
+		conds.append("so.transaction_date >= %(from_date)s")
+		vals["from_date"] = kwargs["from_date"]
+	if kwargs.get("to_date"):
+		conds.append("so.transaction_date <= %(to_date)s")
+		vals["to_date"] = kwargs["to_date"]
+	if kwargs.get("customer"):
+		conds.append("so.customer = %(customer)s")
+		vals["customer"] = kwargs["customer"]
+	if kwargs.get("customer_group"):
+		conds.append("c.customer_group = %(customer_group)s")
+		vals["customer_group"] = kwargs["customer_group"]
+	if kwargs.get("territory"):
+		conds.append("so.territory = %(territory)s")
+		vals["territory"] = kwargs["territory"]
+	if kwargs.get("item_group"):
+		conds.append("(i.item_group = %(item_group)s OR ig.parent_item_group = %(item_group)s)")
+		vals["item_group"] = kwargs["item_group"]
+	if kwargs.get("in_brand"):
+		conds.append("soi.custom_inbrand = %(in_brand)s")
+		vals["in_brand"] = kwargs["in_brand"]
+
+	where_clause = " AND ".join(conds)
+
+	query = f"""
+		SELECT
+			so.company,
+			COALESCE(NULLIF(so.custom_sales_order_no, ''), so.name) AS sales_order_no,
+			so.name AS so_name,
+			so.customer,
+			COALESCE(c.customer_name, so.customer) AS customer_name,
+			so.transaction_date AS date,
+			soi.delivery_date,
+			soi.item_code,
+			soi.item_name,
+			COALESCE(NULLIF(soi.custom_inbrand, ''), '-') AS in_brand,
+			COALESCE(NULLIF(ig.parent_item_group, ''), '-') AS parent_item_group,
+			COALESCE(NULLIF(i.item_group, ''), '-') AS item_group,
+			ROUND(soi.qty - IFNULL(soi.delivered_qty, 0)) AS pending_qty,
+			soi.uom
+		FROM
+			`tabSales Order` so
+		INNER JOIN
+			`tabSales Order Item` soi ON soi.parent = so.name
+		LEFT JOIN
+			`tabCustomer` c ON c.name = so.customer
+		LEFT JOIN
+			`tabItem` i ON i.name = soi.item_code
+		LEFT JOIN
+			`tabItem Group` ig ON ig.name = i.item_group
+		WHERE
+			{where_clause}
+		ORDER BY
+			so.transaction_date ASC,
+			soi.item_code ASC
+	"""
+
+	rows = frappe.db.sql(query, vals, as_dict=True)
+
+	# Aggregate KPIs
+	total_orders = len(set(r.get("so_name") for r in rows if r.get("so_name")))
+	total_pending_qty = sum(flt(r.get("pending_qty", 0)) for r in rows)
+	total_customers = len(set(r.get("customer") for r in rows if r.get("customer")))
+	total_items = len(set(r.get("item_code") for r in rows if r.get("item_code")))
+	total_brands = len(set(r.get("in_brand") for r in rows if r.get("in_brand") and r.get("in_brand") != "-"))
+
+	# Aggregate Charts
+	# 1. Delivery Timeline (by month of soi.delivery_date)
+	del_timeline = {}
+	for r in rows:
+		d_date = r.get("delivery_date")
+		if d_date:
+			m_key = str(d_date)[:7]
+		else:
+			m_key = "Unscheduled"
+		del_timeline[m_key] = del_timeline.get(m_key, 0.0) + flt(r.get("pending_qty", 0))
+	sorted_timeline = sorted([k for k in del_timeline.keys() if k != "Unscheduled"])
+	timeline_data = [{"month": m, "pending_qty": del_timeline[m]} for m in sorted_timeline]
+	if "Unscheduled" in del_timeline:
+		timeline_data.append({"month": "Unscheduled", "pending_qty": del_timeline["Unscheduled"]})
+
+	# 2. Top 8 Items by Pending Qty
+	item_aggr = {}
+	for r in rows:
+		icode = r.get("item_code") or "Unknown"
+		item_aggr[icode] = item_aggr.get(icode, 0.0) + flt(r.get("pending_qty", 0))
+	sorted_items = sorted(item_aggr.items(), key=lambda x: x[1], reverse=True)[:8]
+	top_items = [{"item_code": k, "pending_qty": v} for k, v in sorted_items]
+
+	# 3. Brand Split
+	brand_aggr = {}
+	for r in rows:
+		b = r.get("in_brand") or "No Brand"
+		brand_aggr[b] = brand_aggr.get(b, 0.0) + flt(r.get("pending_qty", 0))
+	sorted_brand = sorted(brand_aggr.items(), key=lambda x: x[1], reverse=True)
+	if len(sorted_brand) > 5:
+		top_brands = [{"brand": k, "pending_qty": v} for k, v in sorted_brand[:5]]
+		other_qty = sum(v for _, v in sorted_brand[5:])
+		top_brands.append({"brand": "Others", "pending_qty": other_qty})
+	else:
+		top_brands = [{"brand": k, "pending_qty": v} for k, v in sorted_brand]
+
+	# 4. Company Split
+	comp_aggr = {}
+	for r in rows:
+		co = r.get("company") or "Unknown"
+		comp_aggr[co] = comp_aggr.get(co, 0.0) + flt(r.get("pending_qty", 0))
+	company_split = [{"company": k, "pending_qty": v} for k, v in comp_aggr.items()]
+
+	return {
+		"columns": [
+			{"label": "Company", "fieldname": "company", "width": 140},
+			{"label": "Sales Order No", "fieldname": "sales_order_no", "width": 150},
+			{"label": "Customer", "fieldname": "customer", "width": 140},
+			{"label": "Date", "fieldname": "date", "width": 100},
+			{"label": "Delivery Date", "fieldname": "delivery_date", "width": 110},
+			{"label": "Item Code", "fieldname": "item_code", "width": 110},
+			{"label": "Item Name", "fieldname": "item_name", "width": 180},
+			{"label": "In Brand", "fieldname": "in_brand", "width": 120},
+			{"label": "Parent Item Group", "fieldname": "parent_item_group", "width": 150},
+			{"label": "Item Group", "fieldname": "item_group", "width": 150},
+			{"label": "Pending Qty", "fieldname": "pending_qty", "width": 120, "type": "Int"},
+			{"label": "UOM", "fieldname": "uom", "width": 80},
+		],
+		"rows": rows,
+		"summary": {
+			"total_orders": total_orders,
+			"total_pending_qty": total_pending_qty,
+			"total_customers": total_customers,
+			"total_items": total_items,
+			"total_brands": total_brands,
+			"total_rows": len(rows),
+			"company": company or "All Companies",
+		},
+		"charts": {
+			"delivery_timeline": timeline_data,
+			"top_items": top_items,
+			"brand_split": top_brands,
+			"company_split": company_split,
+		},
+	}
+

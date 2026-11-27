@@ -128,6 +128,22 @@ frappe.pages["production-analytics"].on_page_load = function (wrapper) {
                 </div>
             </div>
 
+            <!-- Charts Row for Pending Production Items Analysis -->
+            <div class="pd-row-3col" id="pd-summary-charts-row" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-bottom:16px;">
+                <div class="pd-chart-card">
+                    <div class="pd-chart-title">Top 10 Item Groups by Pending Qty</div>
+                    <div id="chart-summary-top-groups" class="pd-chart-body" style="min-height:260px;"></div>
+                </div>
+                <div class="pd-chart-card">
+                    <div class="pd-chart-title">Parent Category Distribution</div>
+                    <div id="chart-summary-parent-split" class="pd-chart-body" style="min-height:260px;"></div>
+                </div>
+                <div class="pd-chart-card">
+                    <div class="pd-chart-title">Company Split</div>
+                    <div id="chart-summary-company-split" class="pd-chart-body" style="min-height:260px;"></div>
+                </div>
+            </div>
+
             <!-- Pending Production Item Table Card -->
             <div class="pd-chart-card pd-summary-card">
                 <div class="pd-summary-card-header">
@@ -730,8 +746,65 @@ frappe.pages["production-analytics"].on_page_load = function (wrapper) {
                 $("#pd-summary-count-badge").text((sum.total_rows || 0) + " item groups");
 
                 render_pending_items_table(_pending_report_data);
+                render_summary_charts(data.charts || {});
             }
         });
+    }
+
+    function render_summary_charts(ch) {
+        // 1. Top 10 Item Groups
+        destroy_chart("summary_top_groups");
+        $("#chart-summary-top-groups").empty();
+        let top_groups = ch.top_item_groups || [];
+        if (!top_groups.length) {
+            $("#chart-summary-top-groups").html('<div class="pd-empty">No pending items</div>');
+        } else {
+            charts.summary_top_groups = new frappe.Chart("#chart-summary-top-groups", {
+                data: {
+                    labels: top_groups.map(x => x.item_group),
+                    datasets: [{ name: "Pending Qty", values: top_groups.map(x => x.pending_qty) }]
+                },
+                type: "bar",
+                height: 260,
+                colors: ["#d97706"]
+            });
+        }
+
+        // 2. Parent Category Distribution
+        destroy_chart("summary_parent_split");
+        $("#chart-summary-parent-split").empty();
+        let parents = ch.parent_group_split || [];
+        if (!parents.length || is_chart_empty(parents, "pending_qty")) {
+            $("#chart-summary-parent-split").html('<div class="pd-empty">No categories</div>');
+        } else {
+            charts.summary_parent_split = new frappe.Chart("#chart-summary-parent-split", {
+                data: {
+                    labels: parents.map(x => x.parent_group),
+                    datasets: [{ values: parents.map(x => x.pending_qty) }]
+                },
+                type: "donut",
+                height: 260,
+                colors: ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#64748b"]
+            });
+        }
+
+        // 3. Company Split
+        destroy_chart("summary_company_split");
+        $("#chart-summary-company-split").empty();
+        let comps = ch.company_split || [];
+        if (!comps.length || is_chart_empty(comps, "pending_qty")) {
+            $("#chart-summary-company-split").html('<div class="pd-empty">No company data</div>');
+        } else {
+            charts.summary_company_split = new frappe.Chart("#chart-summary-company-split", {
+                data: {
+                    labels: comps.map(x => x.company),
+                    datasets: [{ name: "Pending Qty", values: comps.map(x => x.pending_qty) }]
+                },
+                type: "donut",
+                height: 260,
+                colors: ["#2563eb", "#059669", "#d97706"]
+            });
+        }
     }
 
     function render_pending_items_table(rows) {

@@ -45,6 +45,8 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
             <div class="sa-tab" id="tab-btn-fulfillment" onclick="sa_switch_tab('fulfillment')">Fulfillment</div>
             <div class="sa-tab" id="tab-btn-receivables" onclick="sa_switch_tab('receivables')">Receivables</div>
             <div class="sa-tab" id="tab-btn-activity" onclick="sa_switch_tab('activity')">Customer Activity</div>
+            <div class="sa-tab" id="tab-btn-analysis" onclick="sa_switch_tab('analysis')">Sales Order Analysis</div>
+            <div class="sa-tab" id="tab-btn-pending" onclick="sa_switch_tab('pending')">Pending Orders</div>
         </div>
 
         <!-- ================= TAB 1: OVERVIEW ================= -->
@@ -244,6 +246,217 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
                 </table></div>
             </div>
         </div>
+
+        <!-- ================= TAB 5: SALES ORDER ANALYSIS ================= -->
+        <div id="tab-content-analysis" class="sa-tab-pane" style="display:none;">
+            <!-- Modern Control Toolbar -->
+            <div class="sa-summary-toolbar">
+                <div class="sa-summary-toolbar-left">
+                    <span class="sa-toolbar-title" style="font-weight:600; font-size:15px; color:#1e293b; margin-right:12px;">📋 Sales Order Analysis Report</span>
+                    <div class="sa-search-box">
+                        <input type="text" id="inp-so-analysis-search" class="sa-search-input" placeholder="Search Order No, Customer, Brand, Item…" oninput="sa_filter_analysis_table()">
+                        <span class="sa-search-icon">🔍</span>
+                    </div>
+                </div>
+                <div class="sa-summary-toolbar-right">
+                    <span id="sa-analysis-count-badge" class="sa-count-badge">0 records</span>
+                    <button class="sa-btn sa-btn-primary" onclick="sa_export_analysis_csv()">
+                        📥 Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="sa-kpi-row" id="sa-analysis-kpis">
+                <div class="sa-kpi" id="akpi-pending-total">
+                    <div class="sa-kpi-icon">⏳</div>
+                    <div class="sa-kpi-val" id="akpi-pending-qty">0</div>
+                    <div class="sa-kpi-label">Total Pending Qty</div>
+                </div>
+                <div class="sa-kpi" id="akpi-order-total">
+                    <div class="sa-kpi-icon">📦</div>
+                    <div class="sa-kpi-val" id="akpi-order-qty">0</div>
+                    <div class="sa-kpi-label">Total Order Qty</div>
+                </div>
+                <div class="sa-kpi" id="akpi-orders-card">
+                    <div class="sa-kpi-icon">📝</div>
+                    <div class="sa-kpi-val" id="akpi-orders-count">0</div>
+                    <div class="sa-kpi-label">Sales Orders</div>
+                </div>
+                <div class="sa-kpi" id="akpi-cust-card">
+                    <div class="sa-kpi-icon">👥</div>
+                    <div class="sa-kpi-val" id="akpi-cust-count">0</div>
+                    <div class="sa-kpi-label">Active Customers</div>
+                </div>
+                <div class="sa-kpi" id="akpi-brands-card">
+                    <div class="sa-kpi-icon">🏷️</div>
+                    <div class="sa-kpi-val" id="akpi-brands-count">0</div>
+                    <div class="sa-kpi-label">Active Brands</div>
+                </div>
+                <div class="sa-kpi" id="akpi-scope-card">
+                    <div class="sa-kpi-icon">🏢</div>
+                    <div class="sa-kpi-val" id="akpi-scope-name" style="font-size:14px; word-break:break-word;">All Companies</div>
+                    <div class="sa-kpi-label">Company Scope</div>
+                </div>
+            </div>
+
+            <!-- Analysis Charts Row -->
+            <div class="sa-row-3col" id="sa-analysis-charts-row">
+                <div class="sa-chart-card">
+                    <div class="sa-chart-title">Top 5 Customers by Pending Qty</div>
+                    <div id="chart-analysis-top-cust" class="sa-chart-body"></div>
+                </div>
+                <div class="sa-chart-card">
+                    <div class="sa-chart-title">Brand Split (Pending Qty)</div>
+                    <div id="chart-analysis-brand-split" class="sa-chart-body"></div>
+                </div>
+                <div class="sa-chart-card">
+                    <div class="sa-chart-title">Parent Category Distribution</div>
+                    <div id="chart-analysis-parent-split" class="sa-chart-body"></div>
+                </div>
+            </div>
+
+            <!-- Sales Order Analysis Table Card -->
+            <div class="sa-chart-card sa-table-card">
+                <div class="sa-summary-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div class="sa-chart-title" style="margin-bottom:0;">
+                        <span>Sales Order Analysis - All Companies</span>
+                        <span class="sa-status-badge sa-badge-blue" style="margin-left:8px;">Live Demand</span>
+                    </div>
+                </div>
+                <div class="sa-table-wrap">
+                    <table class="sa-table" id="tbl-analysis-report">
+                        <thead>
+                            <tr>
+                                <th style="width:40px; text-align:center;">#</th>
+                                <th>Company</th>
+                                <th>Customer</th>
+                                <th>Customer Name</th>
+                                <th>Sales Order No</th>
+                                <th>Date</th>
+                                <th>Delivery Date</th>
+                                <th>Item Code</th>
+                                <th>Item Name</th>
+                                <th>In Brand</th>
+                                <th>Parent Item Group</th>
+                                <th>Item Group</th>
+                                <th class="num">Rate</th>
+                                <th class="num">Order Qty</th>
+                                <th class="num">Pending Qty</th>
+                                <th style="text-align:center;">UOM</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-analysis-body">
+                            <tr><td colspan="16" class="sa-empty">Loading report…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 6: PENDING ORDERS ================= -->
+        <div id="tab-content-pending" class="sa-tab-pane" style="display:none;">
+            <!-- Modern Control Toolbar -->
+            <div class="sa-summary-toolbar">
+                <div class="sa-summary-toolbar-left">
+                    <span class="sa-toolbar-title" style="font-weight:600; font-size:15px; color:#1e293b; margin-right:12px;">📦 Pending Order Report</span>
+                    <div class="sa-search-box">
+                        <input type="text" id="inp-so-pending-search" class="sa-search-input" placeholder="Search Order No, Customer, Brand, Item…" oninput="sa_filter_pending_table()">
+                        <span class="sa-search-icon">🔍</span>
+                    </div>
+                </div>
+                <div class="sa-summary-toolbar-right">
+                    <span id="sa-pending-count-badge" class="sa-count-badge">0 records</span>
+                    <button class="sa-btn sa-btn-primary" onclick="sa_export_pending_csv()">
+                        📥 Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <!-- KPI Cards -->
+            <div class="sa-kpi-row" id="sa-pending-kpis">
+                <div class="sa-kpi" id="pkpi-pend-total-card">
+                    <div class="sa-kpi-icon">⏳</div>
+                    <div class="sa-kpi-val" id="pkpi-pend-qty">0</div>
+                    <div class="sa-kpi-label">Total Pending Qty</div>
+                </div>
+                <div class="sa-kpi" id="pkpi-pend-orders-card">
+                    <div class="sa-kpi-icon">📝</div>
+                    <div class="sa-kpi-val" id="pkpi-pend-orders">0</div>
+                    <div class="sa-kpi-label">Sales Orders</div>
+                </div>
+                <div class="sa-kpi" id="pkpi-pend-cust-card">
+                    <div class="sa-kpi-icon">👥</div>
+                    <div class="sa-kpi-val" id="pkpi-pend-cust">0</div>
+                    <div class="sa-kpi-label">Customers</div>
+                </div>
+                <div class="sa-kpi" id="pkpi-pend-items-card">
+                    <div class="sa-kpi-icon">📦</div>
+                    <div class="sa-kpi-val" id="pkpi-pend-items">0</div>
+                    <div class="sa-kpi-label">Unique Items</div>
+                </div>
+                <div class="sa-kpi" id="pkpi-pend-brands-card">
+                    <div class="sa-kpi-icon">🏷️</div>
+                    <div class="sa-kpi-val" id="pkpi-pend-brands">0</div>
+                    <div class="sa-kpi-label">Brands</div>
+                </div>
+                <div class="sa-kpi" id="pkpi-pend-scope-card">
+                    <div class="sa-kpi-icon">🏢</div>
+                    <div class="sa-kpi-val" id="pkpi-pend-scope" style="font-size:14px; word-break:break-word;">All Companies</div>
+                    <div class="sa-kpi-label">Company Scope</div>
+                </div>
+            </div>
+
+            <!-- Pending Orders Charts Row -->
+            <div class="sa-row-3col" id="sa-pending-charts-row">
+                <div class="sa-chart-card">
+                    <div class="sa-chart-title">Delivery Schedule Timeline</div>
+                    <div id="chart-pending-timeline" class="sa-chart-body"></div>
+                </div>
+                <div class="sa-chart-card">
+                    <div class="sa-chart-title">Top Items by Pending Qty</div>
+                    <div id="chart-pending-top-items" class="sa-chart-body"></div>
+                </div>
+                <div class="sa-chart-card">
+                    <div class="sa-chart-title">Pending Qty by Brand</div>
+                    <div id="chart-pending-brand-split" class="sa-chart-body"></div>
+                </div>
+            </div>
+
+            <!-- Pending Orders Table Card -->
+            <div class="sa-chart-card sa-table-card">
+                <div class="sa-summary-card-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div class="sa-chart-title" style="margin-bottom:0;">
+                        <span>Pending Order Report - All Companies</span>
+                        <span class="sa-status-badge sa-badge-blue" style="margin-left:8px;">Live Demand</span>
+                    </div>
+                </div>
+                <div class="sa-table-wrap">
+                    <table class="sa-table" id="tbl-pending-report">
+                        <thead>
+                            <tr>
+                                <th style="width:40px; text-align:center;">#</th>
+                                <th>Company</th>
+                                <th>Sales Order No</th>
+                                <th>Customer</th>
+                                <th>Date</th>
+                                <th>Delivery Date</th>
+                                <th>Item Code</th>
+                                <th>Item Name</th>
+                                <th>In Brand</th>
+                                <th>Parent Item Group</th>
+                                <th>Item Group</th>
+                                <th class="num">Pending Qty</th>
+                                <th style="text-align:center;">UOM</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbl-pending-body">
+                            <tr><td colspan="13" class="sa-empty">Loading report…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     `);
 
     // ── State ─────────────────────────────────────────────────────────────
@@ -323,7 +536,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         if (f_comp) f_comp.set_value(def_company);
         f_from.set_value(""); f_to.set_value(""); f_cust.set_value("");
         f_cg.set_value(""); f_terr.set_value(""); f_ig.set_value(""); f_sp.set_value("");
-        _table_filters = { overview:{}, fulfillment:{}, receivables:{}, activity:{} };
+        _table_filters = { overview:{}, fulfillment:{}, receivables:{}, activity:{}, analysis:{}, pending:{} };
         apply_filters();
     }
 
@@ -343,6 +556,8 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         else if (tab === "fulfillment") load_fulfillment();
         else if (tab === "receivables") load_receivables();
         else if (tab === "activity") load_activity();
+        else if (tab === "analysis") load_analysis();
+        else if (tab === "pending") load_pending();
         
         apply_client_table_filter(tab);
     }
@@ -383,7 +598,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         if (p.get("item_group"))      f_ig.set_value(p.get("item_group"));
         if (p.get("sales_person"))    f_sp.set_value(p.get("sales_person"));
         
-        if (p.get("tab") && ["overview","fulfillment","receivables","activity"].includes(p.get("tab"))) {
+        if (p.get("tab") && ["overview","fulfillment","receivables","activity","analysis","pending"].includes(p.get("tab"))) {
             current_tab = p.get("tab");
         }
     }
@@ -393,7 +608,7 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         if (_autoRefreshTimer) clearInterval(_autoRefreshTimer);
         _autoRefreshTimer = setInterval(() => {
             if (document.hidden) return;
-            if (["fulfillment", "receivables"].includes(current_tab)) {
+            if (["fulfillment", "receivables", "analysis", "pending"].includes(current_tab)) {
                 refresh_tab(current_tab);
                 let ts = frappe.datetime.now_time();
                 $("#sa-last-ts").text(ts);
@@ -822,6 +1037,427 @@ frappe.pages["sales-analytics"].on_page_load = function (wrapper) {
         }});
     }
 
+    // ================= TAB 5: SALES ORDER ANALYSIS LOADERS ================= //
+    let _analysis_report_data = [];
+
+    function load_analysis() {
+        ["akpi-pending-total","akpi-order-total","akpi-orders-card","akpi-cust-card","akpi-brands-card","akpi-scope-card"].forEach(id => $("#"+id).addClass("loading"));
+        $("#tbl-analysis-body").html('<tr><td colspan="16" class="sa-empty"><div class="sa-spinner" style="margin:20px auto"></div>Loading Sales Order Analysis Report…</td></tr>');
+
+        frappe.call({
+            method: API + "get_sales_order_analysis_report",
+            args: _filters,
+            callback: function(r) {
+                ["akpi-pending-total","akpi-order-total","akpi-orders-card","akpi-cust-card","akpi-brands-card","akpi-scope-card"].forEach(id => $("#"+id).removeClass("loading"));
+                if (!r.message || !r.message.rows) {
+                    $("#tbl-analysis-body").html('<tr><td colspan="16" class="sa-empty">No sales orders found.</td></tr>');
+                    return;
+                }
+                let data = r.message;
+                _analysis_report_data = data.rows || [];
+                let sum = data.summary || {};
+
+                $("#akpi-pending-qty").text(fmt_num(sum.total_pending_qty, 0));
+                $("#akpi-order-qty").text(fmt_num(sum.total_order_qty, 0));
+                $("#akpi-orders-count").text(sum.total_orders || 0);
+                $("#akpi-cust-count").text(sum.total_customers || 0);
+                $("#akpi-brands-count").text(sum.total_brands || 0);
+                $("#akpi-scope-name").text(sum.company || "All Companies");
+                $("#sa-analysis-count-badge").text((sum.total_rows || 0) + " items");
+
+                render_analysis_table(_analysis_report_data);
+                render_analysis_charts(data.charts || {});
+            }
+        });
+    }
+
+    function render_analysis_charts(ch) {
+        // 1. Top Customers by Pending Qty
+        destroy_chart("a_top_cust");
+        $("#chart-analysis-top-cust").empty();
+        let top_cust = ch.top_customers || [];
+        if (!top_cust.length || is_chart_empty(top_cust, "pending_qty")) {
+            $("#chart-analysis-top-cust").html('<div class="sa-empty">No customer data</div>');
+        } else {
+            charts.a_top_cust = new frappe.Chart("#chart-analysis-top-cust", {
+                data: {
+                    labels: top_cust.map(x => x.customer && x.customer.length > 20 ? x.customer.substring(0, 18) + "…" : (x.customer || "Unknown")),
+                    datasets: [{ name: "Pending Qty", values: top_cust.map(x => x.pending_qty) }]
+                },
+                type: "bar",
+                height: 260,
+                colors: ["#3182ce"]
+            });
+        }
+
+        // 2. Brand Split
+        destroy_chart("a_brand_split");
+        $("#chart-analysis-brand-split").empty();
+        let brands = ch.brand_split || [];
+        if (!brands.length || is_chart_empty(brands, "pending_qty")) {
+            $("#chart-analysis-brand-split").html('<div class="sa-empty">No brand data</div>');
+        } else {
+            charts.a_brand_split = new frappe.Chart("#chart-analysis-brand-split", {
+                data: {
+                    labels: brands.map(x => x.brand),
+                    datasets: [{ values: brands.map(x => x.pending_qty) }]
+                },
+                type: "donut",
+                height: 260,
+                colors: ["#dd6b20", "#38b2ac", "#805ad5", "#48bb78", "#e53e3e", "#718096"]
+            });
+        }
+
+        // 3. Parent Category Split
+        destroy_chart("a_parent_split");
+        $("#chart-analysis-parent-split").empty();
+        let parents = ch.parent_group_split || [];
+        if (!parents.length || is_chart_empty(parents, "pending_qty")) {
+            $("#chart-analysis-parent-split").html('<div class="sa-empty">No category data</div>');
+        } else {
+            charts.a_parent_split = new frappe.Chart("#chart-analysis-parent-split", {
+                data: {
+                    labels: parents.map(x => x.parent_group),
+                    datasets: [{ values: parents.map(x => x.pending_qty) }]
+                },
+                type: "donut",
+                height: 260,
+                colors: ["#4299e1", "#48bb78", "#ed8936", "#9f7aea", "#e53e3e", "#a0aec0"]
+            });
+        }
+    }
+
+    function render_analysis_table(rows) {
+        if (!rows || rows.length === 0) {
+            $("#tbl-analysis-body").html('<tr><td colspan="16" class="sa-empty">No matching records found.</td></tr>');
+            return;
+        }
+
+        let html = rows.map((r, idx) => {
+            let co = frappe.utils.escape_html(r.company || "");
+            let cust = frappe.utils.escape_html(r.customer || "");
+            let cname = frappe.utils.escape_html(r.customer_name || "");
+            let sono = frappe.utils.escape_html(r.sales_order_no || r.so_name || "");
+            let so_link = r.so_name ? `<a onclick="frappe.set_route('Form','Sales Order','${frappe.utils.escape_html(r.so_name)}')">${sono}</a>` : sono;
+            let dt = frappe.utils.escape_html(r.date || "");
+            let ddt = frappe.utils.escape_html(r.delivery_date || "");
+            let icode = frappe.utils.escape_html(r.item_code || "");
+            let iname = frappe.utils.escape_html(r.item_name || "");
+            let brand = frappe.utils.escape_html(r.in_brand || "-");
+            let pgrp = frappe.utils.escape_html(r.parent_item_group || "-");
+            let igrp = frappe.utils.escape_html(r.item_group || "-");
+            let rate = frappe.utils.escape_html(r.rate || "");
+            let o_qty = fmt_num(r.order_qty, 0);
+            let p_qty = fmt_num(r.pending_qty, 0);
+            let uom = frappe.utils.escape_html(r.uom || "PCS");
+
+            return `
+                <tr>
+                    <td style="text-align:center; color:#718096; font-size:11px;">${idx + 1}</td>
+                    <td>${co}</td>
+                    <td><strong>${cust}</strong></td>
+                    <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${cname}">${cname}</td>
+                    <td>${so_link}</td>
+                    <td>${dt}</td>
+                    <td>${ddt}</td>
+                    <td><strong>${icode}</strong></td>
+                    <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${iname}">${iname}</td>
+                    <td><span class="sa-status-badge sa-badge-gray">${brand}</span></td>
+                    <td>${pgrp}</td>
+                    <td>${igrp}</td>
+                    <td class="num">${rate}</td>
+                    <td class="num">${o_qty}</td>
+                    <td class="num" style="font-weight:700; color:#b45309;">${p_qty}</td>
+                    <td style="text-align:center;"><span class="sa-filter-chip">${uom}</span></td>
+                </tr>
+            `;
+        }).join("");
+
+        $("#tbl-analysis-body").html(html);
+    }
+
+    window.sa_filter_analysis_table = function() {
+        let q = ($("#inp-so-analysis-search").val() || "").toLowerCase().trim();
+        if (!q) {
+            render_analysis_table(_analysis_report_data);
+            $("#sa-analysis-count-badge").text(_analysis_report_data.length + " items");
+            return;
+        }
+        let filtered = _analysis_report_data.filter(r => {
+            return (r.company || "").toLowerCase().includes(q) ||
+                   (r.customer || "").toLowerCase().includes(q) ||
+                   (r.customer_name || "").toLowerCase().includes(q) ||
+                   (r.sales_order_no || "").toLowerCase().includes(q) ||
+                   (r.so_name || "").toLowerCase().includes(q) ||
+                   (r.item_code || "").toLowerCase().includes(q) ||
+                   (r.item_name || "").toLowerCase().includes(q) ||
+                   (r.in_brand || "").toLowerCase().includes(q) ||
+                   (r.parent_item_group || "").toLowerCase().includes(q) ||
+                   (r.item_group || "").toLowerCase().includes(q);
+        });
+        render_analysis_table(filtered);
+        $("#sa-analysis-count-badge").text(filtered.length + " items");
+    };
+
+    window.sa_export_analysis_csv = function() {
+        if (!_analysis_report_data || !_analysis_report_data.length) {
+            frappe.msgprint(__("No data available to export."));
+            return;
+        }
+        let q = ($("#inp-so-analysis-search").val() || "").toLowerCase().trim();
+        let export_rows = _analysis_report_data;
+        if (q) {
+            export_rows = _analysis_report_data.filter(r => {
+                return (r.company || "").toLowerCase().includes(q) ||
+                       (r.customer || "").toLowerCase().includes(q) ||
+                       (r.customer_name || "").toLowerCase().includes(q) ||
+                       (r.sales_order_no || "").toLowerCase().includes(q) ||
+                       (r.item_code || "").toLowerCase().includes(q) ||
+                       (r.item_name || "").toLowerCase().includes(q) ||
+                       (r.in_brand || "").toLowerCase().includes(q);
+            });
+        }
+
+        let headers = ["Company", "Customer", "Customer Name", "Sales Order No", "Date", "Delivery Date", "Item Code", "Item Name", "In Brand", "Parent Item Group", "Item Group", "Rate", "Order Qty", "Pending Qty", "UOM"];
+        let csv_rows = [headers.join(",")];
+
+        export_rows.forEach(r => {
+            let row = [
+                `"${(r.company || "").replace(/"/g, '""')}"`,
+                `"${(r.customer || "").replace(/"/g, '""')}"`,
+                `"${(r.customer_name || "").replace(/"/g, '""')}"`,
+                `"${(r.sales_order_no || r.so_name || "").replace(/"/g, '""')}"`,
+                `"${(r.date || "")}"`,
+                `"${(r.delivery_date || "")}"`,
+                `"${(r.item_code || "").replace(/"/g, '""')}"`,
+                `"${(r.item_name || "").replace(/"/g, '""')}"`,
+                `"${(r.in_brand || "").replace(/"/g, '""')}"`,
+                `"${(r.parent_item_group || "").replace(/"/g, '""')}"`,
+                `"${(r.item_group || "").replace(/"/g, '""')}"`,
+                `"${(r.rate || "").replace(/"/g, '""')}"`,
+                r.order_qty || 0,
+                r.pending_qty || 0,
+                `"${(r.uom || "").replace(/"/g, '""')}"`
+            ];
+            csv_rows.push(row.join(","));
+        });
+
+        let blob = new Blob([csv_rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+        let url = URL.createObjectURL(blob);
+        let link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Sales_Order_Analysis_${frappe.datetime.now_date()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+
+    // ================= TAB 6: PENDING ORDERS LOADERS ================= //
+    let _pending_report_data = [];
+
+    function load_pending() {
+        ["pkpi-pend-total-card","pkpi-pend-orders-card","pkpi-pend-cust-card","pkpi-pend-items-card","pkpi-pend-brands-card","pkpi-pend-scope-card"].forEach(id => $("#"+id).addClass("loading"));
+        $("#tbl-pending-body").html('<tr><td colspan="13" class="sa-empty"><div class="sa-spinner" style="margin:20px auto"></div>Loading Pending Order Report…</td></tr>');
+
+        frappe.call({
+            method: API + "get_pending_order_report",
+            args: _filters,
+            callback: function(r) {
+                ["pkpi-pend-total-card","pkpi-pend-orders-card","pkpi-pend-cust-card","pkpi-pend-items-card","pkpi-pend-brands-card","pkpi-pend-scope-card"].forEach(id => $("#"+id).removeClass("loading"));
+                if (!r.message || !r.message.rows) {
+                    $("#tbl-pending-body").html('<tr><td colspan="13" class="sa-empty">No pending orders found.</td></tr>');
+                    return;
+                }
+                let data = r.message;
+                _pending_report_data = data.rows || [];
+                let sum = data.summary || {};
+
+                $("#pkpi-pend-qty").text(fmt_num(sum.total_pending_qty, 0));
+                $("#pkpi-pend-orders").text(sum.total_orders || 0);
+                $("#pkpi-pend-cust").text(sum.total_customers || 0);
+                $("#pkpi-pend-items").text(sum.total_items || 0);
+                $("#pkpi-pend-brands").text(sum.total_brands || 0);
+                $("#pkpi-pend-scope").text(sum.company || "All Companies");
+                $("#sa-pending-count-badge").text((sum.total_rows || 0) + " items");
+
+                render_pending_table(_pending_report_data);
+                render_pending_charts(data.charts || {});
+            }
+        });
+    }
+
+    function render_pending_charts(ch) {
+        // 1. Delivery Timeline
+        destroy_chart("p_timeline");
+        $("#chart-pending-timeline").empty();
+        let tl = ch.delivery_timeline || [];
+        if (!tl.length || is_chart_empty(tl, "pending_qty")) {
+            $("#chart-pending-timeline").html('<div class="sa-empty">No delivery schedule</div>');
+        } else {
+            charts.p_timeline = new frappe.Chart("#chart-pending-timeline", {
+                data: {
+                    labels: tl.map(x => x.month),
+                    datasets: [{ name: "Pending Qty", values: tl.map(x => x.pending_qty) }]
+                },
+                type: "bar",
+                height: 260,
+                colors: ["#38b2ac"]
+            });
+        }
+
+        // 2. Top Items by Pending Qty
+        destroy_chart("p_top_items");
+        $("#chart-pending-top-items").empty();
+        let top_items = ch.top_items || [];
+        if (!top_items.length || is_chart_empty(top_items, "pending_qty")) {
+            $("#chart-pending-top-items").html('<div class="sa-empty">No item data</div>');
+        } else {
+            charts.p_top_items = new frappe.Chart("#chart-pending-top-items", {
+                data: {
+                    labels: top_items.map(x => x.item_code && x.item_code.length > 18 ? x.item_code.substring(0, 16) + "…" : (x.item_code || "Unknown")),
+                    datasets: [{ name: "Pending Qty", values: top_items.map(x => x.pending_qty) }]
+                },
+                type: "bar",
+                height: 260,
+                colors: ["#d97706"]
+            });
+        }
+
+        // 3. Brand Split
+        destroy_chart("p_brand_split");
+        $("#chart-pending-brand-split").empty();
+        let brands = ch.brand_split || [];
+        if (!brands.length || is_chart_empty(brands, "pending_qty")) {
+            $("#chart-pending-brand-split").html('<div class="sa-empty">No brand data</div>');
+        } else {
+            charts.p_brand_split = new frappe.Chart("#chart-pending-brand-split", {
+                data: {
+                    labels: brands.map(x => x.brand),
+                    datasets: [{ values: brands.map(x => x.pending_qty) }]
+                },
+                type: "donut",
+                height: 260,
+                colors: ["#4299e1", "#ed8936", "#48bb78", "#9f7aea", "#e53e3e", "#718096"]
+            });
+        }
+    }
+
+    function render_pending_table(rows) {
+        if (!rows || rows.length === 0) {
+            $("#tbl-pending-body").html('<tr><td colspan="13" class="sa-empty">No matching records found.</td></tr>');
+            return;
+        }
+
+        let html = rows.map((r, idx) => {
+            let co = frappe.utils.escape_html(r.company || "");
+            let sono = frappe.utils.escape_html(r.sales_order_no || r.so_name || "");
+            let so_link = r.so_name ? `<a onclick="frappe.set_route('Form','Sales Order','${frappe.utils.escape_html(r.so_name)}')">${sono}</a>` : sono;
+            let cust = frappe.utils.escape_html(r.customer || "");
+            let dt = frappe.utils.escape_html(r.date || "");
+            let ddt = frappe.utils.escape_html(r.delivery_date || "");
+            let icode = frappe.utils.escape_html(r.item_code || "");
+            let iname = frappe.utils.escape_html(r.item_name || "");
+            let brand = frappe.utils.escape_html(r.in_brand || "-");
+            let pgrp = frappe.utils.escape_html(r.parent_item_group || "-");
+            let igrp = frappe.utils.escape_html(r.item_group || "-");
+            let p_qty = fmt_num(r.pending_qty, 0);
+            let uom = frappe.utils.escape_html(r.uom || "PCS");
+
+            return `
+                <tr>
+                    <td style="text-align:center; color:#718096; font-size:11px;">${idx + 1}</td>
+                    <td>${co}</td>
+                    <td>${so_link}</td>
+                    <td><strong>${cust}</strong></td>
+                    <td>${dt}</td>
+                    <td>${ddt}</td>
+                    <td><strong>${icode}</strong></td>
+                    <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${iname}">${iname}</td>
+                    <td><span class="sa-status-badge sa-badge-gray">${brand}</span></td>
+                    <td>${pgrp}</td>
+                    <td>${igrp}</td>
+                    <td class="num" style="font-weight:700; color:#b45309;">${p_qty}</td>
+                    <td style="text-align:center;"><span class="sa-filter-chip">${uom}</span></td>
+                </tr>
+            `;
+        }).join("");
+
+        $("#tbl-pending-body").html(html);
+    }
+
+    window.sa_filter_pending_table = function() {
+        let q = ($("#inp-so-pending-search").val() || "").toLowerCase().trim();
+        if (!q) {
+            render_pending_table(_pending_report_data);
+            $("#sa-pending-count-badge").text(_pending_report_data.length + " items");
+            return;
+        }
+        let filtered = _pending_report_data.filter(r => {
+            return (r.company || "").toLowerCase().includes(q) ||
+                   (r.sales_order_no || "").toLowerCase().includes(q) ||
+                   (r.so_name || "").toLowerCase().includes(q) ||
+                   (r.customer || "").toLowerCase().includes(q) ||
+                   (r.customer_name || "").toLowerCase().includes(q) ||
+                   (r.item_code || "").toLowerCase().includes(q) ||
+                   (r.item_name || "").toLowerCase().includes(q) ||
+                   (r.in_brand || "").toLowerCase().includes(q) ||
+                   (r.parent_item_group || "").toLowerCase().includes(q) ||
+                   (r.item_group || "").toLowerCase().includes(q);
+        });
+        render_pending_table(filtered);
+        $("#sa-pending-count-badge").text(filtered.length + " items");
+    };
+
+    window.sa_export_pending_csv = function() {
+        if (!_pending_report_data || !_pending_report_data.length) {
+            frappe.msgprint(__("No data available to export."));
+            return;
+        }
+        let q = ($("#inp-so-pending-search").val() || "").toLowerCase().trim();
+        let export_rows = _pending_report_data;
+        if (q) {
+            export_rows = _pending_report_data.filter(r => {
+                return (r.company || "").toLowerCase().includes(q) ||
+                       (r.sales_order_no || "").toLowerCase().includes(q) ||
+                       (r.customer || "").toLowerCase().includes(q) ||
+                       (r.item_code || "").toLowerCase().includes(q) ||
+                       (r.item_name || "").toLowerCase().includes(q) ||
+                       (r.in_brand || "").toLowerCase().includes(q);
+            });
+        }
+
+        let headers = ["Company", "Sales Order No", "Customer", "Date", "Delivery Date", "Item Code", "Item Name", "In Brand", "Parent Item Group", "Item Group", "Pending Qty", "UOM"];
+        let csv_rows = [headers.join(",")];
+
+        export_rows.forEach(r => {
+            let row = [
+                `"${(r.company || "").replace(/"/g, '""')}"`,
+                `"${(r.sales_order_no || r.so_name || "").replace(/"/g, '""')}"`,
+                `"${(r.customer || "").replace(/"/g, '""')}"`,
+                `"${(r.date || "")}"`,
+                `"${(r.delivery_date || "")}"`,
+                `"${(r.item_code || "").replace(/"/g, '""')}"`,
+                `"${(r.item_name || "").replace(/"/g, '""')}"`,
+                `"${(r.in_brand || "").replace(/"/g, '""')}"`,
+                `"${(r.parent_item_group || "").replace(/"/g, '""')}"`,
+                `"${(r.item_group || "").replace(/"/g, '""')}"`,
+                r.pending_qty || 0,
+                `"${(r.uom || "").replace(/"/g, '""')}"`
+            ];
+            csv_rows.push(row.join(","));
+        });
+
+        let blob = new Blob([csv_rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+        let url = URL.createObjectURL(blob);
+        let link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Pending_Order_Report_${frappe.datetime.now_date()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     function status_cls(s) {
         if (["Completed","Closed","Paid"].includes(s)) return "sa-badge-green";
         if (["Work In Progress","Partial","Partially Paid"].includes(s)) return "sa-badge-blue";
@@ -881,6 +1517,17 @@ a { cursor:pointer; color:#3182ce; } a:hover { text-decoration:underline; }
 .sa-tab { padding:10px 20px; cursor:pointer; font-weight:600; font-size:14px; color:#718096; border-bottom:3px solid transparent; transition:all .2s; }
 .sa-tab:hover { color:#2b6cb0; background:#ebf8ff; border-radius:6px 6px 0 0; }
 .sa-tab.active { color:#2b6cb0; border-bottom-color:#3182ce; }
+.sa-summary-toolbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; background:#fff; padding:14px 18px; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.05); margin-bottom:16px; border:1px solid #e2e8f0; }
+.sa-summary-toolbar-left { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.sa-summary-toolbar-right { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.sa-search-box { position:relative; display:inline-block; }
+.sa-search-input { padding:6px 12px 6px 32px; border:1px solid #cbd5e0; border-radius:6px; font-size:13px; color:#2d3748; width:260px; outline:none; transition:border-color .2s; }
+.sa-search-input:focus { border-color:#3182ce; box-shadow:0 0 0 1px #3182ce; }
+.sa-search-icon { position:absolute; left:9px; top:50%; transform:translateY(-50%); font-size:13px; color:#a0aec0; pointer-events:none; }
+.sa-count-badge { background:#e2e8f0; color:#4a5568; font-size:11px; font-weight:700; padding:3px 10px; border-radius:12px; }
+.sa-btn { padding:6px 14px; font-size:12px; font-weight:600; border-radius:6px; cursor:pointer; transition:all .2s; border:1px solid transparent; display:inline-flex; align-items:center; gap:6px; }
+.sa-btn-primary { background:#3182ce; color:#fff; border-color:#3182ce; }
+.sa-btn-primary:hover { background:#2b6cb0; border-color:#2b6cb0; }
     `;
     document.head.appendChild(s);
 }
