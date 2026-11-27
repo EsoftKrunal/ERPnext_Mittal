@@ -87,6 +87,7 @@ required_apps = ["erpnext"]
 
 # before_install = "custom_dashbords.install.before_install"
 # after_install = "custom_dashbords.install.after_install"
+after_migrate = "custom_dashbords.setup.setup_workspace_shortcuts"
 
 # Uninstallation
 # ------------
