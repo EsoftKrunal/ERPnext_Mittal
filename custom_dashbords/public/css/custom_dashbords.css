@@ -1,0 +1,27 @@
+/* Custom Dashboards — Desk Workspace Enhancements */
+
+/* Prevent shortcut labels from truncating with ellipsis in Quick Access */
+.widget.shortcut-widget-box {
+    min-height: 48px !important;
+    height: auto !important;
+    padding: 10px 14px !important;
+}
+
+.widget.shortcut-widget-box .widget-head {
+    align-items: center;
+}
+
+.widget.shortcut-widget-box .widget-label {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+}
+
+.widget.shortcut-widget-box .widget-label .widget-title {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: break-word !important;
+    line-height: 1.3 !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+}

@@ -25,7 +25,7 @@ required_apps = ["erpnext"]
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/custom_dashbords/css/custom_dashbords.css"
+app_include_css = "/assets/custom_dashbords/css/custom_dashbords.css"
 # app_include_js = "/assets/custom_dashbords/js/custom_dashbords.js"
 
 # include js, css files in header of web template
